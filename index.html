@@ -358,7 +358,7 @@
         const Sidebar = ({ activeTab, setActiveTab }) => (
             <aside class="col-span-1 space-y-6">
                 <nav class="space-y-1">
-                    {['Dashboard', 'US Markets', 'Polish Stocks', 'Crypto', 'History', 'Settings'].map(tab => (
+                    {['Dashboard', 'Beginner Stats', 'US Markets', 'Polish Stocks', 'Crypto', 'History', 'Settings'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -615,7 +615,170 @@
             );
         };
 
-        const MainContent = ({ activeTab, marketData, loading, portfolio, onOpenTrade, selectedAsset, onSelectAsset }) => {
+        const BeginnerStats = ({ portfolio, marketData }) => {
+            // Aggregate data
+            const stats = useMemo(() => {
+                const uniqueSymbols = new Set([
+                    ...portfolio.history.map(h => h.symbol),
+                    ...portfolio.positions.map(p => p.symbol)
+                ]);
+
+                // Exclude 'USD' (Cash deposits)
+                uniqueSymbols.delete('USD');
+
+                const computed = [];
+                const allMarketAssets = [...(marketData.us || []), ...(marketData.pl || []), ...(marketData.crypto || [])];
+
+                uniqueSymbols.forEach(symbol => {
+                    // Filter history for this symbol
+                    const txs = portfolio.history.filter(h => h.symbol === symbol);
+
+                    let totalInvested = 0;
+                    let totalSold = 0;
+                    let totalQtyBuys = 0;
+
+                    txs.forEach(tx => {
+                        if (tx.type === 'BUY') {
+                            totalInvested += tx.qty * tx.price;
+                            totalQtyBuys += tx.qty;
+                        } else if (tx.type === 'SELL') {
+                            totalSold += tx.qty * tx.price;
+                        }
+                    });
+
+                    // Current Position Value
+                    const pos = portfolio.positions.find(p => p.symbol === symbol);
+                    // Get real-time price if available, else use pos.avgPrice or last known
+                    const marketAsset = allMarketAssets.find(a => a.symbol === symbol);
+                    const currentPrice = marketAsset ? marketAsset.price : (pos ? pos.avgPrice : 0);
+
+                    const openQty = pos ? pos.qty : 0;
+                    const currentValue = openQty * currentPrice;
+
+                    // Total P/L = (Returned + CurrentValue) - Invested
+                    const totalPL = (totalSold + currentValue) - totalInvested;
+                    const isProfitable = totalPL >= 0;
+
+                    computed.push({
+                        symbol,
+                        name: marketAsset ? marketAsset.name : symbol,
+                        totalInvested,
+                        totalSold,
+                        currentValue,
+                        totalPL,
+                        isProfitable,
+                        openQty
+                    });
+                });
+
+                return computed.sort((a, b) => b.totalPL - a.totalPL); // Best first
+            }, [portfolio, marketData]);
+
+            return (
+                <div class="space-y-6">
+                    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-8 rounded-lg text-white shadow-lg mb-8">
+                        <h2 class="text-3xl font-bold mb-2">Your Investing Journey</h2>
+                        <p class="opacity-90">Keep track of your total profits and losses for each asset. Green means you made money, Red means you lost money.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {stats.map(stat => (
+                            <div key={stat.symbol} class="bg-white dark:bg-zinc-800 border-2 rounded-xl p-6 shadow-sm hover:shadow-md transition relative overflow-hidden group">
+                                <div class={`absolute top-0 left-0 w-2 h-full ${stat.isProfitable ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+
+                                <div class="flex justify-between items-start mb-4 pl-4">
+                                    <div>
+                                        <h3 class="text-2xl font-bold">{stat.symbol}</h3>
+                                        <p class="text-xs text-gray-500 font-bold uppercase">{stat.name}</p>
+                                    </div>
+                                    <div class={`text-xs font-bold px-2 py-1 rounded ${stat.openQty > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                                        {stat.openQty > 0 ? 'ACTIVE' : 'CLOSED'}
+                                    </div>
+                                </div>
+
+                                <div class="pl-4 space-y-4">
+                                    <div>
+                                        <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Profit / Loss</p>
+                                        <p class={`text-3xl font-bold font-mono ${stat.isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
+                                            {stat.totalPL >= 0 ? '+' : ''}{formatCurrency(stat.totalPL)}
+                                        </p>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-gray-100 dark:border-zinc-700">
+                                        <div>
+                                            <p class="text-xs text-gray-400">Total Invested</p>
+                                            <p class="font-bold">{formatCurrency(stat.totalInvested)}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-xs text-gray-400">Current Value</p>
+                                            <p class="font-bold">{formatCurrency(stat.currentValue + stat.totalSold)} <span class="text-[10px] opacity-60">(Inc. Sold)</span></p>
+                                        </div>
+                                    </div>
+
+                                    <div class={`p-3 rounded text-sm font-bold text-center ${stat.isProfitable ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
+                                        {stat.isProfitable
+                                            ? "🎉 Great job! You are in profit."
+                                            : "📉 Currently down. Persistence is key!"}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {stats.length === 0 && (
+                        <div class="text-center p-12 bg-gray-50 dark:bg-zinc-800/50 rounded-lg dashed-border">
+                            <h3 class="text-xl font-bold text-gray-400">No trading history yet</h3>
+                            <p class="text-gray-500 mt-2">Make your first trade to see statistics here!</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const AddCashModal = ({ isOpen, onClose, onAddCash }) => {
+            if (!isOpen) return null;
+            const [amount, setAmount] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                const val = parseFloat(amount);
+                if (val > 0) {
+                    onAddCash(val);
+                    setAmount('');
+                    onClose();
+                } else {
+                    alert("Please enter a valid amount.");
+                }
+            };
+
+            return (
+                <div class="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+                    <div class="bg-white dark:bg-zinc-900 border border-black dark:border-white p-6 max-w-sm w-full shadow-2xl rounded-sm">
+                        <h2 class="text-xl font-bold mb-4 uppercase">Add Cash</h2>
+                        <form onSubmit={handleSubmit} class="space-y-4 font-mono text-sm">
+                            <div class="space-y-2">
+                                <label class="block font-bold">Amount (USD)</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    step="0.01"
+                                    value={amount}
+                                    onChange={e => setAmount(e.target.value)}
+                                    placeholder="e.g. 5000"
+                                    class="w-full p-2 border border-black dark:border-white bg-transparent rounded-sm"
+                                    autoFocus
+                                />
+                            </div>
+                            <div class="flex gap-2 pt-2">
+                                <button type="button" onClick={onClose} class="flex-1 py-2 border border-gray-300 dark:border-zinc-700 font-bold hover:bg-gray-100 dark:hover:bg-zinc-800">CANCEL</button>
+                                <button type="submit" class="flex-1 py-2 bg-emerald-500 text-white font-bold hover:bg-emerald-600">ADD FUNDS</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const MainContent = ({ activeTab, marketData, loading, portfolio, onOpenTrade, selectedAsset, onSelectAsset, onOpenAddCash }) => {
             const currentAsset = selectedAsset || (marketData.us[0] || { symbol: 'AAPL', price: 173.50, change: 1.25, name: 'Apple Inc.' });
 
             if (activeTab === 'Dashboard') {
@@ -626,9 +789,16 @@
                                 <span class="text-xs uppercase font-bold text-gray-400">Total Equity</span>
                                 <div class="text-2xl font-bold font-mono">{formatCurrency(portfolio.equity)}</div>
                             </div>
-                            <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 p-6 rounded-sm shadow-sm">
+                            <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 p-6 rounded-sm shadow-sm relative group">
                                 <span class="text-xs uppercase font-bold text-gray-400">Available Cash</span>
                                 <div class="text-2xl font-bold font-mono">{formatCurrency(portfolio.cash)}</div>
+                                <button
+                                    onClick={onOpenAddCash}
+                                    class="absolute top-4 right-4 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 p-2 rounded-full hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition"
+                                    title="Add Cash"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                </button>
                             </div>
                         </div>
                         <PositionsTable positions={portfolio.positions} onOpenTrade={onOpenTrade} />
@@ -649,6 +819,14 @@
                 return (
                     <section class="col-span-3 space-y-8">
                         <Settings marketData={marketData} />
+                    </section>
+                );
+            }
+
+            if (activeTab === 'Beginner Stats') {
+                return (
+                    <section class="col-span-3 space-y-8">
+                        <BeginnerStats portfolio={portfolio} marketData={marketData} />
                     </section>
                 );
             }
@@ -715,6 +893,7 @@
                 return saved ? JSON.parse(saved) : { cash: 100000, positions: [], history: [], equity: 100000 };
             });
             const [tradeAsset, setTradeAsset] = useState(null);
+            const [isAddCashOpen, setIsAddCashOpen] = useState(false);
 
             // Auto-Trading State
             const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
@@ -724,6 +903,28 @@
                 const id = Date.now();
                 setToasts(prev => [...prev, { id, message, type }]);
                 setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+            };
+
+            const handleAddCash = (amount) => {
+                setPortfolio(prev => {
+                    const newCash = prev.cash + amount;
+                    const newEquity = prev.equity + amount;
+                    const newHistory = [...prev.history, {
+                        date: new Date(),
+                        type: 'DEPOSIT',
+                        symbol: 'USD',
+                        qty: amount,
+                        price: 1,
+                        reason: 'Deposit Funds'
+                    }];
+                    return {
+                        ...prev,
+                        cash: newCash,
+                        equity: newEquity,
+                        history: newHistory
+                    };
+                });
+                addToast(`Successfully added ${formatCurrency(amount)}`, 'success');
             };
 
             // Trade Execution Logic (Refactored for reuse)
@@ -911,9 +1112,11 @@
                             onOpenTrade={setTradeAsset}
                             selectedAsset={selectedAsset}
                             onSelectAsset={setSelectedAsset}
+                            onOpenAddCash={() => setIsAddCashOpen(true)}
                         />
                     </main>
                     <TradeModal isOpen={!!tradeAsset} asset={tradeAsset} onClose={() => setTradeAsset(null)} onTrade={handleManualTrade} />
+                    <AddCashModal isOpen={isAddCashOpen} onClose={() => setIsAddCashOpen(false)} onAddCash={handleAddCash} />
                     <ToastContainer toasts={toasts} />
                 </div>
             );
