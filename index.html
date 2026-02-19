@@ -424,6 +424,77 @@
             return adx;
         };
 
+        // --- Scoring Logic ---
+        const calculateScore = (asset) => {
+            const prices = asset.prices;
+            const volumes = asset.volumes;
+            const highs = asset.highs;
+            const lows = asset.lows;
+            const opens = asset.opens;
+
+            if (!prices || prices.length < 30) return { score: 0, reasons: [] };
+
+            let score = 0;
+            const reasons = [];
+
+            // 1. RSI (14)
+            const rsi = calcRSI(prices, 14);
+            if (rsi >= 40 && rsi <= 60) {
+                score += 20;
+                reasons.push("RSI Neutral (40-60)");
+            } else if (rsi < 30) {
+                score += 20;
+                reasons.push("RSI Oversold (<30)");
+            } else if (rsi > 75) {
+                score -= 15;
+                reasons.push("RSI Overbought (>75)");
+            }
+
+            // 2. MACD Signal Cross (Last 3 candles)
+            const macdData = calcMACD(prices);
+            if (macdData.histogram > 0) {
+                score += 20;
+                reasons.push("MACD Bullish");
+            }
+
+            // 3. Volume Spike
+            const currentVol = volumes[volumes.length - 1];
+            const avgVol = volumes.slice(Math.max(0, volumes.length - 21), volumes.length - 1).reduce((a, b) => a + b, 0) / 20;
+            if (currentVol > 1.5 * avgVol) {
+                score += 15;
+                reasons.push("Volume Spike (>1.5x Avg)");
+            }
+
+            // 4. Bollinger Bands
+            const bb = calcBollingerBands(prices, 20, 2);
+            const currentPrice = prices[prices.length - 1];
+            if (bb) {
+                if (currentPrice <= bb.lower * 1.02) {
+                    score += 15;
+                    reasons.push("Near Lower BB (Dip)");
+                } else if (currentPrice >= bb.upper * 0.98) {
+                    score -= 10;
+                    reasons.push("Near Upper BB");
+                }
+            }
+
+            // 5. Price vs EMA(20)
+            const ema20 = calcEMA(prices, 20);
+            if (ema20 && currentPrice > ema20) {
+                score += 10;
+                reasons.push("Price > EMA(20)");
+            }
+
+            // 6. ADX Trend Strength
+            const adx = calcADX(highs, lows, prices, 14);
+            if (adx > 25) {
+                score += 10;
+                reasons.push(`ADX Strong Trend (${adx.toFixed(1)})`);
+            }
+
+            return { score: Math.max(0, Math.min(100, score)), reasons };
+        };
+
         // --- Components ---
 
         const TradeModal = ({ isOpen, onClose, asset, onTrade }) => {
