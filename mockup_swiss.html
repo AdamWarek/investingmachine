@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swiss Minimalist Trading</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Helvetica+Now+Display:wght@400;500;700&display=swap');
+
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            background-color: #f4f4f5;
+            color: #18181b;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #e4e4e7;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .accent-red {
+            color: #ef4444;
+        }
+
+        .accent-green {
+            color: #10b981;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 min-h-screen p-8 text-gray-900">
+
+    <!-- Header -->
+    <header class="flex justify-between items-end mb-12 border-b-2 border-black pb-4">
+        <div>
+            <h1 class="text-4xl font-extrabold tracking-tighter uppercase">Trade<span class="text-gray-400">.io</span>
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">Professional Trading Environment</p>
+        </div>
+        <div class="text-right">
+            <div class="text-xs uppercase font-bold text-gray-400 tracking-widest mb-1">Total Equity</div>
+            <div class="text-4xl font-bold font-mono tracking-tight">$124,592.40</div>
+            <div class="text-sm font-medium accent-green mt-1 flex items-center justify-end gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18">
+                    </path>
+                </svg>
+                +1.01% Today
+            </div>
+        </div>
+    </header>
+
+    <!-- Layout -->
+    <main class="grid grid-cols-4 gap-8">
+
+        <!-- Left Column: Navigation & Watchlist -->
+        <aside class="col-span-1 space-y-8">
+            <nav class="space-y-1">
+                <a href="#" class="block px-4 py-3 bg-black text-white font-bold rounded-sm">Dashboard</a>
+                <a href="#" class="block px-4 py-3 hover:bg-gray-200 font-medium transition rounded-sm">Orders</a>
+                <a href="#" class="block px-4 py-3 hover:bg-gray-200 font-medium transition rounded-sm">History</a>
+                <a href="#" class="block px-4 py-3 hover:bg-gray-200 font-medium transition rounded-sm">Settings</a>
+            </nav>
+
+            <div class="card p-6 rounded-sm">
+                <h3 class="font-bold text-xs uppercase tracking-widest mb-4 text-gray-400">Watchlist</h3>
+                <ul class="space-y-3 font-mono text-sm">
+                    <li class="flex justify-between">
+                        <span class="font-bold">AAPL</span>
+                        <span class="accent-green">+1.24%</span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="font-bold">MSFT</span>
+                        <span class="accent-red">-0.45%</span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="font-bold">GOOGL</span>
+                        <span class="accent-green">+0.89%</span>
+                    </li>
+                    <li class="flex justify-between">
+                        <span class="font-bold">AMZN</span>
+                        <span class="text-gray-400">0.00%</span>
+                    </li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- Main Column: Chart & Action -->
+        <section class="col-span-2 space-y-8">
+            <div class="card p-8 rounded-sm h-96 flex flex-col justify-between">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-2xl font-bold">Apple Inc.</h2>
+                        <span class="font-mono text-gray-500">NASDAQ: AAPL</span>
+                    </div>
+                    <div class="text-3xl font-mono font-bold">$173.50</div>
+                </div>
+
+                <!-- Mock Chart Area -->
+                <div
+                    class="h-48 w-full bg-gray-50 border border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-sm">
+                    [ Interactive Candle Chart Placeholder ]
+                </div>
+
+                <div class="flex gap-4 pt-4 border-t border-gray-100">
+                    <button
+                        class="flex-1 bg-black text-white hover:bg-gray-800 font-bold py-3 uppercase tracking-wide transition rounded-sm">Buy
+                        Market</button>
+                    <button
+                        class="flex-1 border-2 border-black hover:bg-gray-100 font-bold py-3 uppercase tracking-wide transition rounded-sm">Sell
+                        Market</button>
+                </div>
+            </div>
+
+            <div class="card p-0 rounded-sm overflow-hidden">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 border-b border-gray-200">
+                        <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                            <th class="px-6 py-4">Instrument</th>
+                            <th class="px-6 py-4">Quantity</th>
+                            <th class="px-6 py-4">Entry</th>
+                            <th class="px-6 py-4">Current</th>
+                            <th class="px-6 py-4 text-right">P&L</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 font-mono text-sm">
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 font-bold text-sans">NVDA</td>
+                            <td class="px-6 py-4">50</td>
+                            <td class="px-6 py-4">850.00</td>
+                            <td class="px-6 py-4">885.20</td>
+                            <td class="px-6 py-4 text-right accent-green">+$1,760.00</td>
+                        </tr>
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 font-bold text-sans">TSLA</td>
+                            <td class="px-6 py-4">100</td>
+                            <td class="px-6 py-4">182.00</td>
+                            <td class="px-6 py-4">178.50</td>
+                            <td class="px-6 py-4 text-right accent-red">-$350.00</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Right Column: Algo & Analysis -->
+        <aside class="col-span-1 space-y-8">
+            <div class="card p-6 rounded-sm border-l-4 border-black">
+                <h3 class="font-bold text-lg mb-2">Algorithmic Insight</h3>
+                <p class="text-sm text-gray-600 mb-4 leading-relaxed">
+                    Based on RSI momentum and moving average convergence, <b class="text-black">NVDA</b> shows strong
+                    bullish continuation signals.
+                </p>
+                <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+                    <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                    Confidence: High (85%)
+                </div>
+            </div>
+
+            <div class="bg-gray-200 p-6 rounded-sm text-center">
+                <h3 class="font-bold text-gray-500 text-xs uppercase mb-1">Available Buying Power</h3>
+                <div class="text-2xl font-mono font-bold text-gray-800">$45,200.00</div>
+            </div>
+        </aside>
+
+    </main>
+
+</body>
+
+</html>

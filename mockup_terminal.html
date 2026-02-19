@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TERMINAL_TRADER_v1.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        body {
+            font-family: 'VT323', monospace;
+            background-color: #000;
+            color: #33ff00;
+            text-shadow: 0 0 5px rgba(51, 255, 0, 0.6);
+        }
+
+        .monitor-glow {
+            box-shadow: inset 0 0 50px rgba(0, 50, 0, 0.5);
+        }
+
+        .border-retro {
+            border: 1px solid #33ff00;
+        }
+
+        .bg-retro {
+            background-color: rgba(51, 255, 0, 0.1);
+        }
+
+        .animate-blink {
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #000;
+            border-left: 1px solid #33ff00;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #33ff00;
+        }
+
+        .grid-bg {
+            background-image: linear-gradient(rgba(51, 255, 0, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(51, 255, 0, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen p-4 grid-bg monitor-glow uppercase text-lg">
+
+    <div class="max-w-7xl mx-auto border-retro p-1 min-h-[95vh] flex flex-col">
+
+        <!-- Top Bar -->
+        <header class="border-b border-retro p-2 flex justify-between items-center bg-retro">
+            <div class="font-bold text-2xl tracking-widest">[ SYSTEM_ONLINE ]</div>
+            <div class="flex gap-8">
+                <span>NET_VAL: $124,592.40</span>
+                <span>CASH: $45,200.00</span>
+                <span>P/L: +1.01%</span>
+                <span class="animate-blink">_</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex flex-1 overflow-hidden">
+
+            <!-- Left Command Panel -->
+            <aside class="w-64 border-r border-retro p-4 flex flex-col gap-4">
+                <div class="border-retro p-2">
+                    <h3 class="border-b border-retro mb-2 text-xl">> COMMANDS</h3>
+                    <ul class="space-y-1">
+                        <li class="hover:bg-retro cursor-pointer px-1">> DASHBOARD</li>
+                        <li class="hover:bg-retro cursor-pointer px-1 opacity-50">> MARKETS</li>
+                        <li class="hover:bg-retro cursor-pointer px-1 opacity-50">> WALLET</li>
+                        <li class="hover:bg-retro cursor-pointer px-1 opacity-50">> LOGS</li>
+                        <li class="hover:bg-retro cursor-pointer px-1 text-red-500">> EXIT</li>
+                    </ul>
+                </div>
+
+                <div class="border-retro p-2 flex-1">
+                    <h3 class="border-b border-retro mb-2 text-xl">> TICKER_TAPE</h3>
+                    <div class="text-sm space-y-2 overflow-y-auto h-64">
+                        <div class="flex justify-between"><span>AAPL</span> <span>173.50 ^</span></div>
+                        <div class="flex justify-between text-red-500"><span>MSFT</span> <span>412.10 v</span></div>
+                        <div class="flex justify-between"><span>GOOG</span> <span>138.90 ^</span></div>
+                        <div class="flex justify-between"><span>AMZN</span> <span>175.35 =</span></div>
+                        <div class="flex justify-between text-red-500"><span>TSLA</span> <span>178.50 v</span></div>
+                        <div class="flex justify-between"><span>BTC</span> <span>64020 ^</span></div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Display -->
+            <main class="flex-1 flex flex-col">
+
+                <!-- Chart / Visuals -->
+                <div class="flex-1 p-4 relative">
+                    <div class="absolute top-4 left-4 border-retro bg-black px-2 z-10">NVDA_Daily_Chart</div>
+                    <div class="w-full h-full border-retro flex items-center justify-center relative overflow-hidden">
+                        <!-- ASCII Chart Simulation -->
+                        <pre class="text-xs leading-none opacity-70">
+                                            _.-````-._
+                                          .'           `.
+                                        .'               `.
+              _.-````-._              .'                   `.
+            .'          `-.         .'                       `.
+          .'               `-.    .'                           `.
+        .'                    `--'                               `.
+      .'                                                           `.
+    .'                                                               `
+                        </pre>
+                        <div class="absolute bottom-2 right-2 text-xs">VOL: 42,593,100</div>
+                    </div>
+                </div>
+
+                <!-- Terminal / Log -->
+                <div class="h-48 border-t border-retro p-2 bg-black overflow-y-auto font-mono text-sm">
+                    <div class="text-gray-500">14:02:23 SYSTEM: Fetching data from node ALPHA_VANTAGE... [OK]</div>
+                    <div class="text-gray-500">14:02:24 SYSTEM: Calculating RSI(14) for NVDA... [28 - OVERSOLD]</div>
+                    <div class="text-gray-500">14:02:25 AUTO_BOT: <span class="text-yellow-400">ALERT!</span> Technical
+                        signal triggered for NVDA buy entry.</div>
+                    <div class="text-gray-500">14:02:25 AUTO_BOT: Executing BUY order...</div>
+                    <div class="text-green-500">14:02:26 SUCCESS: Bought 10 NVDA @ 885.20</div>
+                    <div class="animate-blink">> _</div>
+                </div>
+
+            </main>
+
+            <!-- Right Stats -->
+            <aside class="w-72 border-l border-retro p-4 space-y-4">
+                <div class="border-retro p-2">
+                    <h3 class="border-b border-retro mb-2">> ACTIVE_POSITIONS</h3>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between border-b border-dashed border-gray-800 pb-1">
+                            <span>NVDA [50]</span>
+                            <span class="text-green-500">+$1760</span>
+                        </div>
+                        <div class="flex justify-between border-b border-dashed border-gray-800 pb-1">
+                            <span>TSLA [100]</span>
+                            <span class="text-red-500">-$350</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-retro p-2 bg-retro text-black">
+                    <h3 class="font-bold border-b border-black mb-2">> QUICK_EXECUTE</h3>
+                    <div class="grid grid-cols-2 gap-2 text-center text-sm">
+                        <div class="border border-black p-1 hover:bg-black hover:text-green-500 cursor-pointer">[ BUY ]
+                        </div>
+                        <div class="border border-black p-1 hover:bg-black hover:text-red-500 cursor-pointer">[ SELL ]
+                        </div>
+                    </div>
+                    <input type="text" value="NVDA 10 MKT"
+                        class="w-full bg-transparent border-b border-black mt-2 text-black placeholder-black/50 focus:outline-none placeholder:text-gray-600">
+                </div>
+            </aside>
+
+        </div>
+    </div>
+
+</body>
+
+</html>

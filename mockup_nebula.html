@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nebula Glass Trading</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+        .text-glow { text-shadow: 0 0 10px rgba(34, 197, 94, 0.5); }
+        .bg-gradient { background: radial-gradient(circle at top right, #1e1b4b, #0f172a); }
+    </style>
+</head>
+<body class="bg-gradient text-gray-200 min-h-screen p-6">
+
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-8 glass p-4 rounded-xl">
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center font-bold text-black">N</div>
+            <h1 class="text-2xl font-bold tracking-tight">Nebula<span class="text-green-400">Trade</span></h1>
+        </div>
+        <div class="flex gap-6 text-sm">
+            <div class="text-center">
+                <span class="text-gray-400 block text-xs uppercase">Portfolio Value</span>
+                <span class="text-2xl font-bold text-white">$124,592.40</span>
+            </div>
+            <div class="text-center">
+                <span class="text-gray-400 block text-xs uppercase">Today's P&L</span>
+                <span class="text-xl font-bold text-green-400 text-glow">+$1,240.50 (+1.01%)</span>
+            </div>
+        </div>
+        <button class="glass hover:bg-white/10 px-4 py-2 rounded-lg transition">Connect Wallet</button>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="grid grid-cols-12 gap-6">
+        
+        <!-- Sidebar / Navigation -->
+        <aside class="col-span-2 glass rounded-xl p-4 h-[80vh]">
+            <nav class="space-y-2">
+                <a href="#" class="block p-3 rounded-lg bg-white/10 text-white font-medium">Dashboard</a>
+                <a href="#" class="block p-3 rounded-lg hover:bg-white/5 text-gray-400 transition">Markets</a>
+                <a href="#" class="block p-3 rounded-lg hover:bg-white/5 text-gray-400 transition">Portfolio</a>
+                <a href="#" class="block p-3 rounded-lg hover:bg-white/5 text-gray-400 transition">Analysis</a>
+                <a href="#" class="block p-3 rounded-lg hover:bg-white/5 text-gray-400 transition">Settings</a>
+            </nav>
+        </aside>
+
+        <!-- Center Content -->
+        <section class="col-span-7 space-y-6">
+            <!-- Chart Area -->
+            <div class="glass rounded-xl p-6 h-96 relative overflow-hidden">
+                <div class="flex justify-between mb-4">
+                    <h2 class="text-lg font-semibold">AAPL / USD</h2>
+                    <div class="flex gap-2 text-xs">
+                        <button class="px-2 py-1 bg-white/10 rounded">1D</button>
+                        <button class="px-2 py-1 hover:bg-white/5 rounded">1W</button>
+                        <button class="px-2 py-1 hover:bg-white/5 rounded">1M</button>
+                    </div>
+                </div>
+                <!-- Mock Chart Line -->
+                <svg viewBox="0 0 100 40" class="w-full h-full absolute bottom-0 left-0 text-green-500 opacity-80" preserveAspectRatio="none">
+                    <path d="M0 35 Q 10 30, 20 32 T 40 25 T 60 20 T 80 15 T 100 10 V 40 H 0 Z" fill="url(#grad)" />
+                    <path d="M0 35 Q 10 30, 20 32 T 40 25 T 60 20 T 80 15 T 100 10" stroke="currentColor" stroke-width="0.5" fill="none" />
+                    <defs>
+                        <linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:rgb(34,197,94);stop-opacity:0.2" />
+                            <stop offset="100%" style="stop-color:rgb(34,197,94);stop-opacity:0" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+
+            <!-- Positions Table -->
+            <div class="glass rounded-xl p-6">
+                <h3 class="font-semibold mb-4">Open Positions</h3>
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="text-gray-500 border-b border-white/10">
+                            <th class="pb-2">Asset</th>
+                            <th class="pb-2">Price</th>
+                            <th class="pb-2">Change</th>
+                            <th class="pb-2">Value</th>
+                            <th class="pb-2">ROI</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        <tr class="hover:bg-white/5 transition">
+                            <td class="py-3 font-medium">BTC/USD</td>
+                            <td class="py-3">$64,230.00</td>
+                            <td class="py-3 text-green-400">+2.4%</td>
+                            <td class="py-3">$12,400</td>
+                            <td class="py-3 text-green-400">+15.2%</td>
+                        </tr>
+                        <tr class="hover:bg-white/5 transition">
+                            <td class="py-3 font-medium">ETH/USD</td>
+                            <td class="py-3">$3,450.00</td>
+                            <td class="py-3 text-red-400">-1.2%</td>
+                            <td class="py-3">$8,200</td>
+                            <td class="py-3 text-red-400">-3.4%</td>
+                        </tr>
+                        <tr class="hover:bg-white/5 transition">
+                            <td class="py-3 font-medium">TSLA</td>
+                            <td class="py-3">$178.50</td>
+                            <td class="py-3 text-green-400">+0.8%</td>
+                            <td class="py-3">$5,600</td>
+                            <td class="py-3 text-green-400">+4.1%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Right Panel / Stats -->
+        <aside class="col-span-3 space-y-6">
+            <div class="glass rounded-xl p-6">
+                <h3 class="font-semibold mb-4 text-sm uppercase tracking-wide text-gray-400">AI Insights</h3>
+                <div class="space-y-4">
+                    <div class="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-bold text-green-400">strong BUY</span>
+                            <span class="text-xs text-gray-400">NVDA</span>
+                        </div>
+                        <p class="text-xs text-gray-300">RSI oversold at 28. MACD crossover imminent. Volume spike detected.</p>
+                    </div>
+                    <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-bold text-red-400">SELL</span>
+                            <span class="text-xs text-gray-400">AMD</span>
+                        </div>
+                        <p class="text-xs text-gray-300">Approaching resistance at $180. Declining momentum.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass rounded-xl p-6">
+                <h3 class="font-semibold mb-4">Quick Trade</h3>
+                <div class="space-y-3">
+                    <input type="text" placeholder="Symbol (e.g. AAPL)" class="w-full bg-black/20 border border-white/10 rounded-lg p-2 text-sm focus:outline-none focus:border-green-500 transition">
+                    <div class="flex gap-2">
+                        <button class="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded-lg transition">BUY</button>
+                        <button class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded-lg transition">SELL</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+    </main>
+
+</body>
+</html>
