@@ -14,8 +14,7 @@ if (supabaseUrl && supabaseKey && supabaseUrl !== 'YOUR_SUPABASE_URL') {
 }
 
 let memoryStore = {
-    portfolio: { cash: 100000, positions: [], equity: 100000 },
-    history: [],
+    portfolio: { cash: 100000, positions: [], equity: 100000, history: [] },
     marketData: {}
 };
 
