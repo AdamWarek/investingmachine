@@ -1030,12 +1030,20 @@
                         price: 1,
                         reason: 'Deposit Funds'
                     }];
-                    return {
+                    const newPortfolio = {
                         ...prev,
                         cash: newCash,
                         equity: newEquity,
                         history: newHistory
                     };
+
+                    fetch('/api/portfolio', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newPortfolio)
+                    }).catch(err => console.error("Failed to save portfolio after deposit:", err));
+
+                    return newPortfolio;
                 });
                 addToast(`Successfully added ${formatCurrency(amount)}`, 'success');
             };
@@ -1110,35 +1118,28 @@
                 return () => clearInterval(intervalId);
             }, [autoTradeEnabled, loading, config.interval]);
 
-            // Save Portfolio Effect
+            // Update Equity Effect (Local Only - DB save handled by backend now)
             useEffect(() => {
-                const savePortfolio = () => {
-                    if (!portfolioLoaded) return; // Prevent overwriting DB with default before load
+                if (!portfolioLoaded || loading) return;
 
-                    let positionValue = 0;
-                    // We need to access the LATEST portfolio from state, but this effect runs on 'portfolio' change.
-                    // So 'portfolio' here is fresh.
-                    const allAssets = [...marketData.us, ...marketData.pl, ...marketData.crypto];
-                    if (allAssets.length === 0) return;
+                let positionValue = 0;
+                const allAssets = [...marketData.us, ...marketData.pl, ...marketData.crypto];
+                if (allAssets.length === 0) return;
 
-                    const newPositions = portfolio.positions.map(p => {
-                        const asset = allAssets.find(a => a.symbol === p.symbol);
-                        const currentPrice = asset ? asset.price : p.avgPrice;
-                        positionValue += p.qty * currentPrice;
-                        return { ...p, currentPrice };
-                    });
+                const newPositions = portfolio.positions.map(p => {
+                    const asset = allAssets.find(a => a.symbol === p.symbol);
+                    const currentPrice = asset ? asset.price : p.avgPrice;
+                    positionValue += p.qty * currentPrice;
+                    return { ...p, currentPrice };
+                });
 
-                    const newEquity = portfolio.cash + positionValue;
-                    const updated = { ...portfolio, equity: newEquity, positions: newPositions };
+                const newEquity = portfolio.cash + positionValue;
 
-                    fetch('/api/portfolio', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(updated)
-                    }).catch(err => console.error("Failed to save portfolio to DB:", err));
-                };
-                if (!loading) savePortfolio();
-            }, [portfolioLoaded, marketData, portfolio.cash, portfolio.positions.length, portfolio.history.length]); // Dependencies to update equity
+                // Only update state if equity actually changed to avoid infinite render loops
+                if (Math.abs(portfolio.equity - newEquity) > 0.01) {
+                    setPortfolio(prev => ({ ...prev, equity: newEquity, positions: newPositions }));
+                }
+            }, [portfolioLoaded, marketData, loading]); // Safely track market data updates
 
 
             // Theme Toggle

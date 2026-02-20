@@ -598,7 +598,7 @@ app.get('/ping', (req, res) => {
     res.send('pong');
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3005;
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`- Dashboard: http://localhost:${PORT}/index.html`);
