@@ -32,10 +32,25 @@ const generateHistory = (currentPrice) => {
 };
 
 const fetchCrypto = async () => {
+    const mockData = [
+        { symbol: 'BTC', price: 64230, change: 2.4, name: 'Bitcoin (Fallback)', ...generateHistory(64230) },
+        { symbol: 'ETH', price: 3450, change: -1.2, name: 'Ethereum (Fallback)', ...generateHistory(3450) },
+        { symbol: 'SOL', price: 145.00, change: 5.4, name: 'Solana (Fallback)', ...generateHistory(145.00) }
+    ];
+
     try {
-        const res = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,cardano,ripple&order=market_cap_desc&per_page=5&page=1&sparkline=false');
+        // Simple timeout to avoid hanging
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+
+        const res = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,cardano,ripple&order=market_cap_desc&per_page=5&page=1&sparkline=false', { signal: controller.signal });
+        clearTimeout(timeout);
+
         if (!res.ok) throw new Error(`CoinGecko status: ${res.status}`);
         const data = await res.json();
+
+        if (!Array.isArray(data) || data.length === 0) throw new Error("Empty Crypto Data");
+
         return data.map(coin => ({
             symbol: coin.symbol.toUpperCase(),
             price: coin.current_price,
@@ -45,30 +60,26 @@ const fetchCrypto = async () => {
         }));
     } catch (err) {
         console.warn("Crypto fetch failed:", err.message);
-        // Fallback
-        return [
-            { symbol: 'BTC', price: 64230, change: 2.4, name: 'Bitcoin (Fallback)', ...generateHistory(64230) },
-            { symbol: 'ETH', price: 3450, change: -1.2, name: 'Ethereum (Fallback)', ...generateHistory(3450) }
-        ];
+        return mockData;
     }
 };
 
 const fetchUSStocks = async () => {
     const apiKey = process.env.AV_API_KEY;
-    if (!apiKey || apiKey === 'YOUR_ALPHA_VANTAGE_KEY') {
-        return [
-            { symbol: 'AAPL', price: 173.50, change: 1.24, name: 'Apple Inc. (Mock)', ...generateHistory(173.50) },
-            { symbol: 'NVDA', price: 885.20, change: 3.50, name: 'NVIDIA Corp. (Mock)', ...generateHistory(885.20) }
-        ];
-    }
+    const mockData = [
+        { symbol: 'AAPL', price: 173.50, change: 1.24, name: 'Apple Inc. (Mock)', ...generateHistory(173.50) },
+        { symbol: 'NVDA', price: 885.20, change: 3.50, name: 'NVIDIA Corp. (Mock)', ...generateHistory(885.20) },
+        { symbol: 'MSFT', price: 420.00, change: 0.80, name: 'Microsoft (Mock)', ...generateHistory(420.00) }
+    ];
 
-    // Limited fetch to avoid rate limits (Demo: just fetch AAPL)
-    // In production we would cycle through symbols
-    const symbol = 'AAPL';
+    if (!apiKey || apiKey === 'YOUR_ALPHA_VANTAGE_KEY') return mockData;
+
     try {
+        const symbol = 'AAPL';
         const res = await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${apiKey}`);
         const data = await res.json();
         const quote = data['Global Quote'];
+
         if (quote && quote['05. price']) {
             return [{
                 symbol: symbol,
@@ -78,30 +89,42 @@ const fetchUSStocks = async () => {
                 ...generateHistory(parseFloat(quote['05. price']))
             }];
         }
-        console.warn("AV Quote Empty:", data);
+        console.warn("AV Quote Empty or Warning:", data);
+        return mockData; // Fallback on empty API response
     } catch (err) {
         console.warn("AV fetch failed:", err.message);
+        return mockData; // Fallback on network error
     }
-    return [];
 };
 
 async function fetchMarketData() {
     console.log("Fetching market data...");
 
-    // Parallel fetch
-    const [cryptoData, usData] = await Promise.all([
-        fetchCrypto(),
-        fetchUSStocks()
-    ]);
+    // Initial data if empty (Fail-safe)
+    if (marketData.us.length === 0) {
+        marketData.us = [
+            { symbol: 'AAPL', price: 173.50, change: 1.24, name: 'Apple Inc. (Loading)', ...generateHistory(173.50) }
+        ];
+    }
 
-    // Mock PL stocks for simplicity
-    const plData = [
-        { symbol: 'PKO', price: 45.20, change: 1.10, name: 'PKO BP', ...generateHistory(45.20) },
-        { symbol: 'CDR', price: 115.00, change: 0.50, name: 'CD Projekt', ...generateHistory(115.00) }
-    ];
+    try {
+        const [cryptoData, usData] = await Promise.all([
+            fetchCrypto(),
+            fetchUSStocks()
+        ]);
 
-    marketData = { us: usData, pl: plData, crypto: cryptoData };
-    lastFetch = Date.now();
+        const plData = [
+            { symbol: 'PKO', price: 45.20, change: 1.10, name: 'PKO BP', ...generateHistory(45.20) },
+            { symbol: 'CDR', price: 115.00, change: 0.50, name: 'CD Projekt', ...generateHistory(115.00) },
+            { symbol: 'XTB', price: 65.00, change: 2.10, name: 'XTB S.A.', ...generateHistory(65.00) }
+        ];
+
+        marketData = { us: usData, pl: plData, crypto: cryptoData };
+        lastFetch = Date.now();
+        console.log("Market Data Updated Successfully");
+    } catch (e) {
+        console.error("Critical Error in fetchMarketData:", e);
+    }
     return marketData;
 }
 
