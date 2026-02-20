@@ -155,121 +155,17 @@
         const formatPct = (val) => (val > 0 ? '+' : '') + val.toFixed(2) + '%';
 
         // --- API & Data Logic ---
-        // Cache Helpers
-        const getCached = (key) => {
-            const item = localStorage.getItem(key);
-            if (!item) return null;
-            const { data, timestamp } = JSON.parse(item);
-            // 60 minutes cache for API data to save limits
-            if (Date.now() - timestamp > 60 * 60 * 1000) return null;
-            return data;
-        };
-
-        const setCache = (key, data) => {
-            localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
-        };
-
-        // Crypto: Use Yahoo Finance for consistency (BTC-USD, etc)
-        const fetchCrypto = async () => {
-            const symbols = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD'];
-            const cacheKey = 'data_crypto_real_v2';
-            const cached = getCached(cacheKey);
-            if (cached) return cached;
-
-            const results = [];
-
-            for (const symbol of symbols) {
-                const history = await fetchYahooHistory(symbol); // Yahoo uses 'BTC-USD'
-                const displaySymbol = symbol.replace('-USD', '');
-
-                if (history && history.prices.length > 0) {
-                    const lastPrice = history.prices[history.prices.length - 1];
-                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
-                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-
-                    results.push({
-                        symbol: displaySymbol,
-                        name: displaySymbol,
-                        price: lastPrice,
-                        change: change,
-                        ...history
-                    });
-                } else {
-                    results.push({ symbol: displaySymbol, price: 0, change: 0, name: symbol, ...generateHistory(1000) });
-                }
+        // --- API & Data Logic ---
+        const fetchBackendData = async () => {
+            try {
+                const res = await fetch('/api/status');
+                if (!res.ok) throw new Error("Backend Error");
+                const data = await res.json();
+                return data;
+            } catch (err) {
+                console.error("Backend connection failed:", err);
+                return null;
             }
-
-            setCache(cacheKey, results);
-            return results;
-        };
-
-        // US Stocks: Yahoo Finance via Proxy
-        const fetchUSStocks = async () => {
-            const symbols = ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD'];
-            const cacheKey = 'data_us_real_yahoo_v2';
-            const cached = getCached(cacheKey);
-            if (cached) return cached;
-
-            const results = [];
-
-            // We can fetch data sequentially to avoid rate limits on the proxy
-            for (const symbol of symbols) {
-                // We fetch history directly which contains current price as last entry
-                const history = await fetchYahooHistory(symbol);
-                if (history && history.prices.length > 0) {
-                    const lastPrice = history.prices[history.prices.length - 1];
-                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
-                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-
-                    results.push({
-                        symbol,
-                        name: symbol, // Yahoo API might need another call for name, use Symbol for now
-                        price: lastPrice,
-                        change: change,
-                        ...history
-                    });
-                } else {
-                    // Fallback
-                    results.push({ symbol, price: 0, change: 0, name: symbol, ...generateHistory(100) });
-                }
-            }
-
-            setCache(cacheKey, results);
-            return results;
-        };
-
-        // Polish Stocks: Yahoo Finance via Proxy
-        const fetchPLStocks = async () => {
-            const symbols = ['PKO.WA', 'KGH.WA', 'CDR.WA', 'ALE.WA', 'PZU.WA', 'DIN.WA'];
-            const cacheKey = 'data_pl_real_v2';
-            const cached = getCached(cacheKey);
-            if (cached) return cached;
-
-            const results = [];
-
-            for (const symbol of symbols) {
-                const history = await fetchYahooHistory(symbol);
-                const shortSymbol = symbol.replace('.WA', '');
-
-                if (history && history.prices.length > 0) {
-                    const lastPrice = history.prices[history.prices.length - 1];
-                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
-                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-
-                    results.push({
-                        symbol: shortSymbol,
-                        name: symbol,
-                        price: lastPrice,
-                        change: change,
-                        ...history
-                    });
-                } else {
-                    results.push({ symbol: shortSymbol, price: 0, change: 0, name: symbol, ...generateHistory(50) });
-                }
-            }
-
-            setCache(cacheKey, results);
-            return results;
         };
 
         // --- Technical Indicators ---
@@ -1085,32 +981,14 @@
         );
 
         const App = () => {
-            // Set dark mode default
-            const [darkMode, setDarkMode] = useState(() => {
-                const saved = localStorage.getItem('theme');
-                return saved ? saved === 'dark' : true; // Default to TRUE (Dark)
-            });
+            const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
             const [activeTab, setActiveTab] = useState('Dashboard');
             const [loading, setLoading] = useState(true);
             const [marketData, setMarketData] = useState({ us: [], pl: [], crypto: [] });
+            const [portfolio, setPortfolio] = useState({ cash: 0, positions: [], history: [], equity: 0 });
             const [selectedAsset, setSelectedAsset] = useState(null);
-
-            const [portfolio, setPortfolio] = useState(() => {
-                const saved = localStorage.getItem('portfolio');
-                return saved ? JSON.parse(saved) : { cash: 100000, positions: [], history: [], equity: 100000 };
-            });
             const [tradeAsset, setTradeAsset] = useState(null);
             const [isAddCashOpen, setIsAddCashOpen] = useState(false);
-
-            // Auto-Trading State
-            const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
-            const [config, setConfig] = useState({
-                interval: 60, // seconds
-                posSizePct: 10, // %
-                slPct: 3,
-                tpPct: 5
-            });
-            const [nextTradeTime, setNextTradeTime] = useState(null);
             const [toasts, setToasts] = useState([]);
 
             const addToast = (message, type = 'info') => {
@@ -1119,250 +997,22 @@
                 setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
             };
 
-            // Countdown Timer
-            const [timeLeft, setTimeLeft] = useState(0);
-
+            // Polling Backend
             useEffect(() => {
-                if (!autoTradeEnabled || !nextTradeTime) {
-                    setTimeLeft(0);
-                    return;
-                }
-                const timer = setInterval(() => {
-                    const diff = Math.max(0, Math.ceil((nextTradeTime - Date.now()) / 1000));
-                    setTimeLeft(diff);
-                }, 1000);
-                return () => clearInterval(timer);
-            }, [autoTradeEnabled, nextTradeTime]);
-
-            const handleAddCash = (amount) => {
-                setPortfolio(prev => {
-                    const newCash = prev.cash + amount;
-                    const newEquity = prev.equity + amount;
-                    const newHistory = [...prev.history, {
-                        date: new Date(),
-                        type: 'DEPOSIT',
-                        symbol: 'USD',
-                        qty: amount,
-                        price: 1,
-                        reason: 'Deposit Funds'
-                    }];
-                    return {
-                        ...prev,
-                        cash: newCash,
-                        equity: newEquity,
-                        history: newHistory
-                    };
-                });
-                addToast(`Successfully added ${formatCurrency(amount)}`, 'success');
-            };
-
-            // Trade Execution Logic
-            const executeTrade = (asset, mode, qty, reason) => {
-                // We use a functional update inside the loop, but we need to reference the *current* portfolio state
-                // inside the loop. However, inside the interval, 'portfolio' is stale.
-                // We will use the functional update form of setPortfolio which is safe.
-
-                setPortfolio(prev => {
-                    const price = asset.price;
-                    const totalCost = price * qty;
-
-                    if (mode === 'BUY') {
-                        if (prev.cash < totalCost) return prev; // Fail silently or log
-
-                        const existing = prev.positions.find(p => p.symbol === asset.symbol);
-                        let newPositions;
-                        if (existing) {
-                            newPositions = prev.positions.map(p => p.symbol === asset.symbol ? { ...p, qty: p.qty + qty, avgPrice: ((p.avgPrice * p.qty) + totalCost) / (p.qty + qty) } : p);
-                        } else {
-                            newPositions = [...prev.positions, { symbol: asset.symbol, qty, avgPrice: price }];
-                        }
-
-                        addToast(`ROBOT: Bought ${asset.symbol} - ${reason}`, 'success');
-
-                        return {
-                            ...prev,
-                            cash: prev.cash - totalCost,
-                            positions: newPositions,
-                            history: [...prev.history, { date: new Date(), type: 'BUY', symbol: asset.symbol, qty, price, reason }]
-                        };
-                    } else {
-                        // SELL
-                        const existing = prev.positions.find(p => p.symbol === asset.symbol);
-                        if (!existing || existing.qty < qty) return prev;
-
-                        let newPositions;
-                        if (existing.qty === qty) {
-                            newPositions = prev.positions.filter(p => p.symbol !== asset.symbol);
-                        } else {
-                            newPositions = prev.positions.map(p => p.symbol === asset.symbol ? { ...p, qty: p.qty - qty } : p);
-                        }
-
-                        addToast(`ROBOT: Sold ${asset.symbol} - ${reason}`, 'error'); // Red for sell/exit
-
-                        return {
-                            ...prev,
-                            cash: prev.cash + totalCost,
-                            positions: newPositions,
-                            history: [...prev.history, { date: new Date(), type: 'SELL', symbol: asset.symbol, qty, price, reason }]
-                        };
+                const poll = async () => {
+                    const data = await fetchBackendData();
+                    if (data) {
+                        setMarketData(data.marketData);
+                        setPortfolio(data.portfolio);
+                        setLoading(false);
                     }
-                });
-            };
-
-            const handleManualTrade = (asset, mode, qty) => {
-                executeTrade(asset, mode, qty, "Manual Trade");
-                setTradeAsset(null);
-            };
-
-            // AUTO TRADING ENGINE
-            useEffect(() => {
-                if (!autoTradeEnabled || loading) {
-                    setNextTradeTime(null);
-                    return;
-                }
-
-                const runEngine = () => {
-                    setPortfolio(currentPortfolio => {
-                        // We need to work with a snapshot. 
-                        // NOTE: using setPortfolio with callback allows us to access latest state, 
-                        // but we can't easily *read* it for decision making inside the same synchronous block unless we check it first.
-                        // Actually, we can just do all logic inside the setPortfolio callback? 
-                        // No, that's messy. 
-                        // Better: The interval passes, we capture values. 
-                        // But React state in `setInterval` closure is stale.
-                        // We can use a REF to store latest portfolio?
-                        return currentPortfolio;
-                    });
-
-                    // Ref approach for Portfolio Access
                 };
+                poll();
+                const interval = setInterval(poll, 2000);
+                return () => clearInterval(interval);
+            }, []);
 
-                // Initialize timer
-                setNextTradeTime(Date.now() + config.interval * 1000);
-
-                const intervalId = setInterval(() => {
-                    // Logic Loop
-                    // Access latest portfolio via ref? Or just rely on functional update 2-step?
-                    // We need to KNOW current cash to decide to buy.
-                    // For this simple app, let's use a "Ref" to hold portfolio for reading in the loop.
-
-                    // Trigger the logic
-                    runAutoTrading();
-                    setNextTradeTime(Date.now() + config.interval * 1000);
-
-                }, config.interval * 1000);
-
-                return () => clearInterval(intervalId);
-            }, [autoTradeEnabled, loading, config.interval]);
-
-            // Ref for Portfolio to be accessible inside setInterval
-            const portfolioRef = React.useRef(portfolio);
-            useEffect(() => { portfolioRef.current = portfolio; }, [portfolio]);
-
-            const marketDataRef = React.useRef(marketData);
-            useEffect(() => { marketDataRef.current = marketData; }, [marketData]);
-
-            const runAutoTrading = () => {
-                const currentP = portfolioRef.current;
-                const mData = marketDataRef.current;
-                const allAssets = [...mData.us, ...mData.pl, ...mData.crypto];
-
-                // 1. AUTO-SELL CHECKS
-                currentP.positions.forEach(pos => {
-                    const asset = allAssets.find(a => a.symbol === pos.symbol);
-                    if (!asset) return;
-
-                    const pnlPct = (asset.price - pos.avgPrice) / pos.avgPrice;
-                    const heldDays = 0; // Need tracking of open date. Assume 0 for now or add to pos.
-
-                    // Conditions
-                    let sellReason = null;
-                    if (pnlPct <= -(config.slPct / 100)) sellReason = `Stop Loss Hit (${(pnlPct * 100).toFixed(2)}%)`;
-                    else if (pnlPct >= (config.tpPct / 100)) sellReason = `Take Profit Hit (+${(pnlPct * 100).toFixed(2)}%)`;
-
-                    // Tech Sell
-                    const rsi = calcRSI(asset.prices);
-                    if (!sellReason && rsi > 75) sellReason = `RSI Overbought (${rsi.toFixed(0)})`;
-
-                    // MACD Death Cross (Current MACD < Signal) - simplified check
-                    const macd = calcMACD(asset.prices);
-                    if (!sellReason && macd.histogram < 0 && macd.prevMacd > macd.prevSignal) sellReason = "MACD Death Cross";
-
-                    if (sellReason) {
-                        executeTrade(asset, 'SELL', pos.qty, sellReason);
-                    }
-                });
-
-                // 2. AUTO-BUY CHECKS
-                // Group by "Tab" or just Type logic?
-                // Requirement: "per tab, top 5 positions"
-                // Let's simplified: Max 5 positions total per asset class? 
-                // Or just Max 5 positions overall for this demo.
-                // "fewer than 5 open positions in tab" -> implies we need to know the 'tab' or source of asset.
-                // We'll estimate based on symbol logic or just global limit of 15? 
-                // Let's do Global Limit of 10 for simplicity or check source list.
-
-                const openPositions = portfolioRef.current.positions; // Fresh ref
-
-                // We need to score ALL assets
-                const scored = allAssets.map(a => ({ asset: a, ...calculateScore(a) }));
-
-                // Filter BUY candidates
-                const candidates = scored.filter(s => s.score > 60);
-
-                // Sort by Score DESC
-                candidates.sort((a, b) => b.score - a.score);
-
-                // Buy Top candidates if Cash > 500
-                // Check cash from Ref again (in case sold above) - simplified, just use currentP.cash + potential sales (not accounted for in this tick)
-                // We'll just use currentP.cash. 
-
-                let availableCash = currentP.cash;
-
-                // We can't update 'availableCash' easily as executeTrade is async state update.
-                // We will limit to 1 Buy per tick to be safe regarding cash sync.
-                if (candidates.length > 0 && availableCash > 500) {
-                    const best = candidates[0];
-                    // Check if already holding?
-                    if (!openPositions.find(p => p.symbol === best.asset.symbol)) {
-                        // Position Sizing
-                        // 10% of Total Portfolio Value
-                        const totalEquity = currentP.equity;
-                        const sizeAmt = totalEquity * (config.posSizePct / 100);
-                        const qty = Math.floor(sizeAmt / best.asset.price);
-
-                        if (qty > 0 && availableCash > (qty * best.asset.price)) {
-                            executeTrade(best.asset, 'BUY', qty, `Score: ${best.score} (${best.reasons.join(', ')})`);
-                        }
-                    }
-                }
-            };
-
-            // ... savePortfolio effect ...
-
-            useEffect(() => {
-                const savePortfolio = () => {
-                    let positionValue = 0;
-                    // We need to access the LATEST portfolio from state, but this effect runs on 'portfolio' change.
-                    // So 'portfolio' here is fresh.
-                    const allAssets = [...marketData.us, ...marketData.pl, ...marketData.crypto];
-                    if (allAssets.length === 0) return;
-
-                    const newPositions = portfolio.positions.map(p => {
-                        const asset = allAssets.find(a => a.symbol === p.symbol);
-                        const currentPrice = asset ? asset.price : p.avgPrice;
-                        positionValue += p.qty * currentPrice;
-                        return { ...p, currentPrice };
-                    });
-
-                    const newEquity = portfolio.cash + positionValue;
-                    const updated = { ...portfolio, equity: newEquity, positions: newPositions };
-                    localStorage.setItem('portfolio', JSON.stringify(updated));
-                };
-                if (!loading) savePortfolio();
-            }, [marketData, portfolio.cash, portfolio.positions.length]); // Dependencies to update equity
-
-            // ... theme effect ...
+            // Theme Toggle
             useEffect(() => {
                 if (darkMode) {
                     document.documentElement.classList.add('dark');
@@ -1373,74 +1023,77 @@
                 }
             }, [darkMode]);
 
-            useEffect(() => {
-                const loadData = async () => {
-                    setLoading(true);
-                    const [us, pl, crypto] = await Promise.all([
-                        fetchUSStocks(),
-                        fetchPLStocks(),
-                        fetchCrypto()
-                    ]);
-                    setMarketData({ us, pl, crypto });
-                    setLoading(false);
-                };
-                loadData();
-            }, []);
+            // Trade Execution (API)
+            const handleManualTrade = async (asset, mode, qty) => {
+                try {
+                    const res = await fetch('/api/trade', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            symbol: asset.symbol,
+                            type: mode,
+                            qty,
+                            price: asset.price
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        addToast(`Success: ${mode} ${asset.symbol}`, 'success');
+                        setTradeAsset(null);
+                        // Portfolio will update on next poll
+                    } else {
+                        addToast(`Error: ${data.error || 'Failed'}`, 'error');
+                    }
+                } catch (e) {
+                    addToast("Network Error", 'error');
+                }
+            };
+
+            // Add Cash (Mock API)
+            const handleAddCash = (amount) => {
+                // In a real app we would POST /api/deposit
+                addToast("Deposit features coming soon to backend!", 'info');
+                setIsAddCashOpen(false);
+            };
 
             return (
-                <div class="container mx-auto p-4 max-w-7xl">
-                    <div class="fixed top-4 right-4 z-40 flex items-center gap-2">
-                        {autoTradeEnabled && (
-                            <div class="bg-black text-white px-3 py-2 rounded-sm font-mono text-sm border border-white font-bold">
-                                Next: {timeLeft}s
-                            </div>
-                        )}
-                        <button
-                            onClick={() => setAutoTradeEnabled(!autoTradeEnabled)}
-                            class={`px-4 py-2 font-bold rounded-sm border-2 ${autoTradeEnabled ? 'bg-emerald-500 text-white border-emerald-500 animate-pulse' : 'bg-gray-200 text-gray-500 border-gray-300'}`}
-                        >
-                            {autoTradeEnabled ? 'STOP ROBOT' : 'START ROBOT'}
-                        </button>
-                    </div>
+                <div class="font-sans text-gray-900 dark:text-gray-100 min-h-screen bg-gray-100 dark:bg-zinc-900 transition-colors duration-300">
+                    <ToastContainer toasts={toasts} />
 
-                    <div class="mb-4 text-right">
-                        <div class="inline-block bg-white dark:bg-zinc-800 p-2 rounded border border-gray-200 dark:border-zinc-700 text-xs shadow-sm">
-                            <h4 class="font-bold mb-1">Robot Config</h4>
-                            <div class="flex gap-4 items-center">
-                                <label class="flex items-center gap-1">
-                                    Size:
-                                    <input type="range" min="5" max="20" step="1" value={config.posSizePct} onChange={e => setConfig({ ...config, posSizePct: Number(e.target.value) })} />
-                                    {config.posSizePct}%
-                                </label>
-                                <label class="flex items-center gap-1">
-                                    Interval:
-                                    <select value={config.interval} onChange={e => setConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
-                                        <option value="10">10s</option>
-                                        <option value="30">30s</option>
-                                        <option value="60">60s</option>
-                                    </select>
-                                </label>
+                    {tradeAsset && (
+                        <TradeModal
+                            isOpen={!!tradeAsset}
+                            asset={tradeAsset}
+                            onClose={() => setTradeAsset(null)}
+                            onTrade={handleManualTrade}
+                        />
+                    )}
+                    <AddCashModal isOpen={isAddCashOpen} onClose={() => setIsAddCashOpen(false)} onAddCash={handleAddCash} />
+
+                    <div class="max-w-7xl mx-auto p-4 md:p-8">
+                        <div class="fixed top-4 right-4 z-40 flex items-center gap-2">
+                            <div class="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg animate-pulse">
+                                Live Connection
                             </div>
                         </div>
-                    </div>
 
-                    <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} />
-                    <main class="grid grid-cols-1 md:grid-cols-4 gap-8">
-                        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-                        <MainContent
-                            activeTab={activeTab}
-                            marketData={marketData}
-                            loading={loading}
-                            portfolio={portfolio}
-                            onOpenTrade={setTradeAsset}
-                            selectedAsset={selectedAsset}
-                            onSelectAsset={setSelectedAsset}
-                            onOpenAddCash={() => setIsAddCashOpen(true)}
-                        />
-                    </main>
-                    <TradeModal isOpen={!!tradeAsset} asset={tradeAsset} onClose={() => setTradeAsset(null)} onTrade={handleManualTrade} />
-                    <AddCashModal isOpen={isAddCashOpen} onClose={() => setIsAddCashOpen(false)} onAddCash={handleAddCash} />
-                    <ToastContainer toasts={toasts} />
+                        <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} />
+
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
+                            <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+
+                            <MainContent
+                                activeTab={activeTab}
+                                marketData={marketData}
+                                loading={loading}
+                                portfolio={portfolio}
+                                onOpenTrade={setTradeAsset}
+                                selectedAsset={selectedAsset}
+                                onSelectAsset={setSelectedAsset}
+                                onOpenAddCash={() => setIsAddCashOpen(true)}
+                            />
+                        </div>
+                    </div>
                 </div>
             );
         };
