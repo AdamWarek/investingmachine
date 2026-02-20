@@ -100,178 +100,13 @@
             return { dates, prices, opens, highs, lows, volumes };
         };
 
-        // --- Real Data Fetcher ---
-        const fetchYahooHistory = async (symbol) => {
-            try {
-                // Yahoo Finance Output: timestamp, indicators -> quote -> open, high, low, close, volume
-                // We ask for 3 months to be safe for indicators
-                const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`;
-                const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
-
-                const res = await fetch(proxyUrl);
-                const data = await res.json();
-
-                if (!data.contents) throw new Error("No contents from proxy");
-
-                const parsed = JSON.parse(data.contents);
-                const result = parsed.chart.result[0];
-                const meta = result.meta;
-                const quote = result.indicators.quote[0];
-                const timestamps = result.timestamp;
-
-                if (!timestamps || !quote) throw new Error("Invalid Yahoo Data Structure");
-
-                const cleanData = {
-                    dates: [],
-                    prices: [],
-                    opens: [],
-                    highs: [],
-                    lows: [],
-                    volumes: []
-                };
-
-                // Filter out nulls (Yahoo has nulls for holidays sometimes)
-                for (let i = 0; i < timestamps.length; i++) {
-                    if (quote.close[i] === null) continue;
-
-                    const date = new Date(timestamps[i] * 1000);
-                    cleanData.dates.push(date.toLocaleDateString());
-                    cleanData.prices.push(quote.close[i]);
-                    cleanData.opens.push(quote.open[i]);
-                    cleanData.highs.push(quote.high[i]);
-                    cleanData.lows.push(quote.low[i]);
-                    cleanData.volumes.push(quote.volume[i]);
-                }
-
-                return cleanData;
-            } catch (e) {
-                console.error(`Failed to fetch history for ${symbol}`, e);
-                return null; // Signals to use fallback
-            }
-        };
+        // (Client-side fetchers moved to server.js)
 
         // --- Mock Data & Utilities ---
         const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
         const formatPct = (val) => (val > 0 ? '+' : '') + val.toFixed(2) + '%';
 
         // --- API & Data Logic ---
-        // --- API & Data Logic ---
-        // Cache Helpers
-        const getCached = (key) => {
-            const item = localStorage.getItem(key);
-            if (!item) return null;
-            const { data, timestamp } = JSON.parse(item);
-            // 60 minutes cache for API data to save limits
-            if (Date.now() - timestamp > 60 * 60 * 1000) return null;
-            return data;
-        };
-
-        const setCache = (key, data) => {
-            localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
-        };
-
-        // Crypto: Use Yahoo Finance for consistency (BTC-USD, etc)
-        const fetchCrypto = async () => {
-            const symbols = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD'];
-            const cacheKey = 'data_crypto_real_v2';
-            const cached = getCached(cacheKey);
-            if (cached) return cached;
-
-            const results = [];
-
-            for (const symbol of symbols) {
-                const history = await fetchYahooHistory(symbol); // Yahoo uses 'BTC-USD'
-                const displaySymbol = symbol.replace('-USD', '');
-
-                if (history && history.prices.length > 0) {
-                    const lastPrice = history.prices[history.prices.length - 1];
-                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
-                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-
-                    results.push({
-                        symbol: displaySymbol,
-                        name: displaySymbol,
-                        price: lastPrice,
-                        change: change,
-                        ...history
-                    });
-                } else {
-                    results.push({ symbol: displaySymbol, price: 0, change: 0, name: symbol, ...generateHistory(1000) });
-                }
-            }
-
-            setCache(cacheKey, results);
-            return results;
-        };
-
-        // US Stocks: Yahoo Finance via Proxy
-        const fetchUSStocks = async () => {
-            const symbols = ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD'];
-            const cacheKey = 'data_us_real_yahoo_v2';
-            const cached = getCached(cacheKey);
-            if (cached) return cached;
-
-            const results = [];
-
-            // We can fetch data sequentially to avoid rate limits on the proxy
-            for (const symbol of symbols) {
-                // We fetch history directly which contains current price as last entry
-                const history = await fetchYahooHistory(symbol);
-                if (history && history.prices.length > 0) {
-                    const lastPrice = history.prices[history.prices.length - 1];
-                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
-                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-
-                    results.push({
-                        symbol,
-                        name: symbol, // Yahoo API might need another call for name, use Symbol for now
-                        price: lastPrice,
-                        change: change,
-                        ...history
-                    });
-                } else {
-                    // Fallback
-                    results.push({ symbol, price: 0, change: 0, name: symbol, ...generateHistory(100) });
-                }
-            }
-
-            setCache(cacheKey, results);
-            return results;
-        };
-
-        // Polish Stocks: Yahoo Finance via Proxy
-        const fetchPLStocks = async () => {
-            const symbols = ['PKO.WA', 'KGH.WA', 'CDR.WA', 'ALE.WA', 'PZU.WA', 'DIN.WA'];
-            const cacheKey = 'data_pl_real_v2';
-            const cached = getCached(cacheKey);
-            if (cached) return cached;
-
-            const results = [];
-
-            for (const symbol of symbols) {
-                const history = await fetchYahooHistory(symbol);
-                const shortSymbol = symbol.replace('.WA', '');
-
-                if (history && history.prices.length > 0) {
-                    const lastPrice = history.prices[history.prices.length - 1];
-                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
-                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-
-                    results.push({
-                        symbol: shortSymbol,
-                        name: symbol,
-                        price: lastPrice,
-                        change: change,
-                        ...history
-                    });
-                } else {
-                    results.push({ symbol: shortSymbol, price: 0, change: 0, name: symbol, ...generateHistory(50) });
-                }
-            }
-
-            setCache(cacheKey, results);
-            return results;
-        };
 
         // --- Technical Indicators ---
 
@@ -1090,22 +925,69 @@
             const [activeTab, setActiveTab] = useState('Dashboard');
             const [loading, setLoading] = useState(true);
             const [marketData, setMarketData] = useState({ us: [], pl: [], crypto: [] });
-            const [portfolio, setPortfolio] = useState(() => {
-                const saved = localStorage.getItem('portfolio');
-                return saved ? JSON.parse(saved) : { cash: 100000, positions: [], history: [], equity: 100000 };
-            });
+            const [portfolio, setPortfolio] = useState({ cash: 100000, positions: [], history: [], equity: 100000 });
+            const [portfolioLoaded, setPortfolioLoaded] = useState(false);
+
+            // Fetch Portfolio on mount & Poll every 5s
+            useEffect(() => {
+                const fetchPortfolioData = () => {
+                    fetch('/api/portfolio')
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data && data.cash !== undefined) {
+                                // Only update state if data has actually changed to avoid re-renders
+                                // Simplify by always setting, React handles some shallow comparison, but deep compare would be better.
+                                // Let's just update for now.
+                                setPortfolio(prev => {
+                                    // Basic stringify compare to prevent infinite loop of savePortfolio -> fetch -> save -> fetch
+                                    const newDataStr = JSON.stringify(data);
+                                    const prevDataStr = JSON.stringify(prev);
+
+                                    if (newDataStr !== prevDataStr) {
+                                        return {
+                                            ...data,
+                                            history: data.history || [],
+                                            positions: data.positions || []
+                                        };
+                                    }
+                                    return prev;
+                                });
+                            }
+                            setPortfolioLoaded(true);
+                        })
+                        .catch(err => {
+                            console.error('Failed to load portfolio:', err);
+                            setPortfolioLoaded(true);
+                        });
+                };
+
+                fetchPortfolioData(); // Initial load
+                const intervalId = setInterval(fetchPortfolioData, 5000); // Poll every 5s
+                return () => clearInterval(intervalId);
+            }, []);
             const [tradeAsset, setTradeAsset] = useState(null);
+            const [selectedAsset, setSelectedAsset] = useState(null);
             const [isAddCashOpen, setIsAddCashOpen] = useState(false);
 
             // Auto-Trading State
             const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
             const [config, setConfig] = useState({
-                interval: 60, // seconds
-                posSizePct: 10, // %
+                interval: 60,
+                posSizePct: 10,
                 slPct: 3,
                 tpPct: 5
             });
             const [nextTradeTime, setNextTradeTime] = useState(null);
+
+            useEffect(() => {
+                fetch('/api/bot/config')
+                    .then(res => res.json())
+                    .then(data => {
+                        setAutoTradeEnabled(data.enabled);
+                        setConfig(data);
+                    })
+                    .catch(err => console.error("Failed to load bot config:", err));
+            }, []);
             const [toasts, setToasts] = useState([]);
 
             const addToast = (message, type = 'info') => {
@@ -1151,163 +1033,66 @@
                 addToast(`Successfully added ${formatCurrency(amount)}`, 'success');
             };
 
-            // Trade Execution Logic
-            const executeTrade = (asset, mode, qty, reason) => {
-                // We use a functional update inside the loop, but we need to reference the *current* portfolio state
-                // inside the loop. However, inside the interval, 'portfolio' is stale.
-                // We will use the functional update form of setPortfolio which is safe.
-
-                setPortfolio(prev => {
-                    const price = asset.price;
-                    const totalCost = price * qty;
-
-                    if (mode === 'BUY') {
-                        if (prev.cash < totalCost) return prev; // Fail silently or log
-
-                        const existing = prev.positions.find(p => p.symbol === asset.symbol);
-                        let newPositions;
-                        if (existing) {
-                            newPositions = prev.positions.map(p => p.symbol === asset.symbol ? { ...p, qty: p.qty + qty, avgPrice: ((p.avgPrice * p.qty) + totalCost) / (p.qty + qty) } : p);
-                        } else {
-                            newPositions = [...prev.positions, { symbol: asset.symbol, qty, avgPrice: price }];
-                        }
-
-                        addToast(`ROBOT: Bought ${asset.symbol} - ${reason}`, 'success');
-
-                        return {
-                            ...prev,
-                            cash: prev.cash - totalCost,
-                            positions: newPositions,
-                            history: [...prev.history, { date: new Date(), type: 'BUY', symbol: asset.symbol, qty, price, reason }]
-                        };
-                    } else {
-                        // SELL
-                        const existing = prev.positions.find(p => p.symbol === asset.symbol);
-                        if (!existing || existing.qty < qty) return prev;
-
-                        let newPositions;
-                        if (existing.qty === qty) {
-                            newPositions = prev.positions.filter(p => p.symbol !== asset.symbol);
-                        } else {
-                            newPositions = prev.positions.map(p => p.symbol === asset.symbol ? { ...p, qty: p.qty - qty } : p);
-                        }
-
-                        addToast(`ROBOT: Sold ${asset.symbol} - ${reason}`, 'error'); // Red for sell/exit
-
-                        return {
-                            ...prev,
-                            cash: prev.cash + totalCost,
-                            positions: newPositions,
-                            history: [...prev.history, { date: new Date(), type: 'SELL', symbol: asset.symbol, qty, price, reason }]
-                        };
+            // Trade Execution Logic (Manual via UI)
+            const handleManualTrade = async (asset, mode, qty) => {
+                setTradeAsset(null); // Close modal
+                try {
+                    const res = await fetch('/api/trade', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ symbol: asset.symbol, type: mode, qty, price: asset.price })
+                    });
+                    const data = await res.json();
+                    if (data.error) {
+                        addToast(data.error, 'error');
+                        return;
                     }
+                    setPortfolio(data.portfolio);
+                    addToast(`Manual ${mode}: ${asset.symbol}`, mode === 'BUY' ? 'success' : 'info');
+                } catch (e) {
+                    addToast("Trade failed", 'error');
+                }
+            };
+
+            // AUTO TRADING API LOGIC
+            const toggleBot = () => {
+                fetch('/api/bot/toggle', { method: 'POST' })
+                    .then(res => res.json())
+                    .then(data => {
+                        setAutoTradeEnabled(data.enabled);
+                        setConfig(data);
+                        addToast(data.enabled ? 'Robot Started' : 'Robot Stopped', data.enabled ? 'success' : 'info');
+                    });
+            };
+
+            const updateConfig = (newConfig) => {
+                setConfig(newConfig);
+                fetch('/api/bot/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newConfig)
                 });
             };
 
-            const handleManualTrade = (asset, mode, qty) => {
-                executeTrade(asset, mode, qty, "Manual Trade");
-                setTradeAsset(null);
-            };
-
-            // AUTO TRADING ENGINE
+            // Local Timer for UI feedback only
             useEffect(() => {
                 if (!autoTradeEnabled || loading) {
                     setNextTradeTime(null);
                     return;
                 }
-
-                const runEngine = () => {
-                    // Placeholder for engine loop trigger
-                };
-
-                // Initialize timer
                 setNextTradeTime(Date.now() + config.interval * 1000);
-
                 const intervalId = setInterval(() => {
-                    // Trigger the logic
-                    runAutoTrading();
                     setNextTradeTime(Date.now() + config.interval * 1000);
-
                 }, config.interval * 1000);
 
                 return () => clearInterval(intervalId);
             }, [autoTradeEnabled, loading, config.interval]);
 
-            // Ref for Portfolio to be accessible inside setInterval
-            const portfolioRef = React.useRef(portfolio);
-            useEffect(() => { portfolioRef.current = portfolio; }, [portfolio]);
-
-            const marketDataRef = React.useRef(marketData);
-            useEffect(() => { marketDataRef.current = marketData; }, [marketData]);
-
-            const runAutoTrading = () => {
-                const currentP = portfolioRef.current;
-                const mData = marketDataRef.current;
-                const allAssets = [...mData.us, ...mData.pl, ...mData.crypto];
-
-                // 1. AUTO-SELL CHECKS
-                currentP.positions.forEach(pos => {
-                    const asset = allAssets.find(a => a.symbol === pos.symbol);
-                    if (!asset) return;
-
-                    const pnlPct = (asset.price - pos.avgPrice) / pos.avgPrice;
-                    const heldDays = 0; // Need tracking of open date. Assume 0 for now or add to pos.
-
-                    // Conditions
-                    let sellReason = null;
-                    if (pnlPct <= -(config.slPct / 100)) sellReason = `Stop Loss Hit (${(pnlPct * 100).toFixed(2)}%)`;
-                    else if (pnlPct >= (config.tpPct / 100)) sellReason = `Take Profit Hit (+${(pnlPct * 100).toFixed(2)}%)`;
-
-                    // Tech Sell
-                    const rsi = calcRSI(asset.prices);
-                    if (!sellReason && rsi > 75) sellReason = `RSI Overbought (${rsi.toFixed(0)})`;
-
-                    // MACD Death Cross (Current MACD < Signal) - simplified check
-                    const macd = calcMACD(asset.prices);
-                    if (!sellReason && macd.histogram < 0 && macd.prevMacd > macd.prevSignal) sellReason = "MACD Death Cross";
-
-                    if (sellReason) {
-                        executeTrade(asset, 'SELL', pos.qty, sellReason);
-                    }
-                });
-
-                // 2. AUTO-BUY CHECKS
-                const openPositions = portfolioRef.current.positions; // Fresh ref
-
-                // We need to score ALL assets
-                const scored = allAssets.map(a => ({ asset: a, ...calculateScore(a) }));
-
-                // Filter BUY candidates
-                const candidates = scored.filter(s => s.score > 60);
-
-                // Sort by Score DESC
-                candidates.sort((a, b) => b.score - a.score);
-
-                // Buy Top candidates if Cash > 500
-                let availableCash = currentP.cash;
-
-                // We can't update 'availableCash' easily as executeTrade is async state update.
-                // We will limit to 1 Buy per tick to be safe regarding cash sync.
-                if (candidates.length > 0 && availableCash > 500) {
-                    const best = candidates[0];
-                    // Check if already holding?
-                    if (!openPositions.find(p => p.symbol === best.asset.symbol)) {
-                        // Position Sizing
-                        // 10% of Total Portfolio Value
-                        const totalEquity = currentP.equity;
-                        const sizeAmt = totalEquity * (config.posSizePct / 100);
-                        const qty = Math.floor(sizeAmt / best.asset.price);
-
-                        if (qty > 0 && availableCash > (qty * best.asset.price)) {
-                            executeTrade(best.asset, 'BUY', qty, `Score: ${best.score} (${best.reasons.join(', ')})`);
-                        }
-                    }
-                }
-            };
-
             // Save Portfolio Effect
             useEffect(() => {
                 const savePortfolio = () => {
+                    if (!portfolioLoaded) return; // Prevent overwriting DB with default before load
+
                     let positionValue = 0;
                     // We need to access the LATEST portfolio from state, but this effect runs on 'portfolio' change.
                     // So 'portfolio' here is fresh.
@@ -1323,10 +1108,15 @@
 
                     const newEquity = portfolio.cash + positionValue;
                     const updated = { ...portfolio, equity: newEquity, positions: newPositions };
-                    localStorage.setItem('portfolio', JSON.stringify(updated));
+
+                    fetch('/api/portfolio', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updated)
+                    }).catch(err => console.error("Failed to save portfolio to DB:", err));
                 };
                 if (!loading) savePortfolio();
-            }, [marketData, portfolio.cash, portfolio.positions.length]); // Dependencies to update equity
+            }, [portfolioLoaded, marketData, portfolio.cash, portfolio.positions.length, portfolio.history.length]); // Dependencies to update equity
 
 
             // Theme Toggle
@@ -1342,16 +1132,22 @@
 
             useEffect(() => {
                 const loadData = async () => {
-                    setLoading(true);
-                    const [us, pl, crypto] = await Promise.all([
-                        fetchUSStocks(),
-                        fetchPLStocks(),
-                        fetchCrypto()
-                    ]);
-                    setMarketData({ us, pl, crypto });
-                    setLoading(false);
+                    try {
+                        const res = await fetch('/api/market-data');
+                        const data = await res.json();
+                        if (data && data.us) {
+                            setMarketData(data);
+                            setLoading(false);
+                        }
+                    } catch (err) {
+                        console.error("Critical error loading market data:", err);
+                        setLoading(false);
+                    }
                 };
-                loadData();
+
+                loadData(); // Initial load
+                const intervalId = setInterval(loadData, 5000); // Poll server every 5s
+                return () => clearInterval(intervalId);
             }, []);
 
             return (
@@ -1376,7 +1172,7 @@
                                 </div>
                             )}
                             <button
-                                onClick={() => setAutoTradeEnabled(!autoTradeEnabled)}
+                                onClick={toggleBot}
                                 class={`px-4 py-2 font-bold rounded-sm border-2 ${autoTradeEnabled ? 'bg-emerald-500 text-white border-emerald-500 animate-pulse' : 'bg-gray-200 text-gray-500 border-gray-300'}`}
                             >
                                 {autoTradeEnabled ? 'STOP ROBOT' : 'START ROBOT'}
@@ -1389,12 +1185,12 @@
                                 <div class="flex gap-4 items-center">
                                     <label class="flex items-center gap-1">
                                         Size:
-                                        <input type="range" min="5" max="20" step="1" value={config.posSizePct} onChange={e => setConfig({ ...config, posSizePct: Number(e.target.value) })} />
+                                        <input type="range" min="5" max="20" step="1" value={config.posSizePct} onChange={e => updateConfig({ ...config, posSizePct: Number(e.target.value) })} />
                                         {config.posSizePct}%
                                     </label>
                                     <label class="flex items-center gap-1">
                                         Interval:
-                                        <select value={config.interval} onChange={e => setConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
+                                        <select value={config.interval} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
                                             <option value="10">10s</option>
                                             <option value="30">30s</option>
                                             <option value="60">60s</option>
