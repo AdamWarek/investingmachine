@@ -59,6 +59,7 @@
 
         // Helper to generate mock history
         // Helper to generate mock history
+        // --- Data Generation (Fallback) ---
         const generateHistory = (currentPrice) => {
             const history = [];
             const now = new Date();
@@ -99,6 +100,56 @@
             return { dates, prices, opens, highs, lows, volumes };
         };
 
+        // --- Real Data Fetcher ---
+        const fetchYahooHistory = async (symbol) => {
+            try {
+                // Yahoo Finance Output: timestamp, indicators -> quote -> open, high, low, close, volume
+                // We ask for 3 months to be safe for indicators
+                const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`;
+                const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
+
+                const res = await fetch(proxyUrl);
+                const data = await res.json();
+
+                if (!data.contents) throw new Error("No contents from proxy");
+
+                const parsed = JSON.parse(data.contents);
+                const result = parsed.chart.result[0];
+                const meta = result.meta;
+                const quote = result.indicators.quote[0];
+                const timestamps = result.timestamp;
+
+                if (!timestamps || !quote) throw new Error("Invalid Yahoo Data Structure");
+
+                const cleanData = {
+                    dates: [],
+                    prices: [],
+                    opens: [],
+                    highs: [],
+                    lows: [],
+                    volumes: []
+                };
+
+                // Filter out nulls (Yahoo has nulls for holidays sometimes)
+                for (let i = 0; i < timestamps.length; i++) {
+                    if (quote.close[i] === null) continue;
+
+                    const date = new Date(timestamps[i] * 1000);
+                    cleanData.dates.push(date.toLocaleDateString());
+                    cleanData.prices.push(quote.close[i]);
+                    cleanData.opens.push(quote.open[i]);
+                    cleanData.highs.push(quote.high[i]);
+                    cleanData.lows.push(quote.low[i]);
+                    cleanData.volumes.push(quote.volume[i]);
+                }
+
+                return cleanData;
+            } catch (e) {
+                console.error(`Failed to fetch history for ${symbol}`, e);
+                return null; // Signals to use fallback
+            }
+        };
+
         // --- Mock Data & Utilities ---
         const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
         const formatPct = (val) => (val > 0 ? '+' : '') + val.toFixed(2) + '%';
@@ -118,144 +169,107 @@
             localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
         };
 
-        // Crypto: CoinGecko (Public)
+        // Crypto: Use Yahoo Finance for consistency (BTC-USD, etc)
         const fetchCrypto = async () => {
-            const cacheKey = 'data_crypto_real';
+            const symbols = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD'];
+            const cacheKey = 'data_crypto_real_v2';
             const cached = getCached(cacheKey);
             if (cached) return cached;
 
-            try {
-                const res = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,cardano,ripple&order=market_cap_desc&per_page=5&page=1&sparkline=false');
-                if (!res.ok) throw new Error('CoinGecko API limit');
-                const data = await res.json();
+            const results = [];
 
-                const mapped = data.map(coin => ({
-                    symbol: coin.symbol.toUpperCase(),
-                    price: coin.current_price,
-                    change: coin.price_change_percentage_24h,
-                    name: coin.name,
-                    ...generateHistory(coin.current_price) // Still sim history for chart consistency unless we fetch candles
-                }));
+            for (const symbol of symbols) {
+                const history = await fetchYahooHistory(symbol); // Yahoo uses 'BTC-USD'
+                const displaySymbol = symbol.replace('-USD', '');
 
-                setCache(cacheKey, mapped);
-                return mapped;
-            } catch (err) {
-                console.warn("Crypto fetch failed, using fallback", err);
-                return [
-                    { symbol: 'BTC', price: 64230, change: 2.4, name: 'Bitcoin', ...generateHistory(64230) },
-                    { symbol: 'ETH', price: 3450, change: -1.2, name: 'Ethereum', ...generateHistory(3450) },
-                    { symbol: 'SOL', price: 145, change: 5.4, name: 'Solana', ...generateHistory(145) }
-                ];
+                if (history && history.prices.length > 0) {
+                    const lastPrice = history.prices[history.prices.length - 1];
+                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
+                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
+
+                    results.push({
+                        symbol: displaySymbol,
+                        name: displaySymbol,
+                        price: lastPrice,
+                        change: change,
+                        ...history
+                    });
+                } else {
+                    results.push({ symbol: displaySymbol, price: 0, change: 0, name: symbol, ...generateHistory(1000) });
+                }
             }
+
+            setCache(cacheKey, results);
+            return results;
         };
 
-        // US Stocks: Yahoo Finance via Proxy (No Key Required)
+        // US Stocks: Yahoo Finance via Proxy
         const fetchUSStocks = async () => {
-
-
-
-
-
-
-
-
-
-
             const symbols = ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD'];
-            const cacheKey = 'data_us_real_yahoo';
+            const cacheKey = 'data_us_real_yahoo_v2';
             const cached = getCached(cacheKey);
             if (cached) return cached;
 
-            try {
-                const results = [];
-                const proxyUrl = 'https://api.allorigins.win/get?url=';
+            const results = [];
 
-                for (const symbol of symbols) {
-                    const targetUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`);
-                    const res = await fetch(proxyUrl + targetUrl);
-                    const data = await res.json();
-                    if (data.contents) {
-                        const parsed = JSON.parse(data.contents);
-                        const meta = parsed.chart.result[0].meta;
-                        const price = meta.regularMarketPrice;
-                        const prevClose = meta.chartPreviousClose;
-                        const change = ((price - prevClose) / prevClose) * 100;
+            // We can fetch data sequentially to avoid rate limits on the proxy
+            for (const symbol of symbols) {
+                // We fetch history directly which contains current price as last entry
+                const history = await fetchYahooHistory(symbol);
+                if (history && history.prices.length > 0) {
+                    const lastPrice = history.prices[history.prices.length - 1];
+                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
+                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-                        results.push({
-                            symbol: symbol,
-                            price: price,
-                            change: change,
-                            name: symbol,
-                            ...generateHistory(price)
-                        });
-                    }
+                    results.push({
+                        symbol,
+                        name: symbol, // Yahoo API might need another call for name, use Symbol for now
+                        price: lastPrice,
+                        change: change,
+                        ...history
+                    });
+                } else {
+                    // Fallback
+                    results.push({ symbol, price: 0, change: 0, name: symbol, ...generateHistory(100) });
                 }
-
-                if (results.length > 0) {
-                    setCache(cacheKey, results);
-                    return results;
-                }
-                throw new Error("No data from Yahoo Proxy for US");
-
-            } catch (err) {
-                console.warn("US Stock fetch failed", err);
-                return [
-                    { symbol: 'AAPL', price: 173.50, change: 1.24, name: 'Apple Inc.', ...generateHistory(173.50) },
-                    { symbol: 'NVDA', price: 885.20, change: 3.50, name: 'NVIDIA Corp.', ...generateHistory(885.20) },
-                    { symbol: 'TSLA', price: 178.50, change: -0.45, name: 'Tesla Inc.', ...generateHistory(178.50) }
-                ];
             }
+
+            setCache(cacheKey, results);
+            return results;
         };
 
         // Polish Stocks: Yahoo Finance via Proxy
         const fetchPLStocks = async () => {
-            const symbols = ['PKO.WA', 'KGH.WA', 'CDR.WA', 'ALE.WA'];
-            const cacheKey = 'data_pl_real';
+            const symbols = ['PKO.WA', 'KGH.WA', 'CDR.WA', 'ALE.WA', 'PZU.WA', 'DIN.WA'];
+            const cacheKey = 'data_pl_real_v2';
             const cached = getCached(cacheKey);
             if (cached) return cached;
 
-            try {
-                const results = [];
-                // Using allorigins.win or corsproxy.io
-                // Yahoo query: https://query1.finance.yahoo.com/v8/finance/chart/PKO.WA?interval=1d&range=1d
+            const results = [];
 
-                const proxyUrl = 'https://api.allorigins.win/get?url=';
+            for (const symbol of symbols) {
+                const history = await fetchYahooHistory(symbol);
+                const shortSymbol = symbol.replace('.WA', '');
 
-                for (const symbol of symbols) {
-                    const targetUrl = encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=1d`);
-                    const res = await fetch(proxyUrl + targetUrl);
-                    const data = await res.json();
-                    if (data.contents) {
-                        const parsed = JSON.parse(data.contents);
-                        const meta = parsed.chart.result[0].meta;
-                        const price = meta.regularMarketPrice;
-                        const prevClose = meta.chartPreviousClose;
-                        const change = ((price - prevClose) / prevClose) * 100;
+                if (history && history.prices.length > 0) {
+                    const lastPrice = history.prices[history.prices.length - 1];
+                    const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
+                    const change = ((lastPrice - prevPrice) / prevPrice) * 100;
 
-                        results.push({
-                            symbol: symbol.replace('.WA', ''),
-                            price: price,
-                            change: change,
-                            name: symbol,
-                            ...generateHistory(price)
-                        });
-                    }
+                    results.push({
+                        symbol: shortSymbol,
+                        name: symbol,
+                        price: lastPrice,
+                        change: change,
+                        ...history
+                    });
+                } else {
+                    results.push({ symbol: shortSymbol, price: 0, change: 0, name: symbol, ...generateHistory(50) });
                 }
-
-                if (results.length > 0) {
-                    setCache(cacheKey, results);
-                    return results;
-                }
-                throw new Error("No data from Yahoo Proxy");
-
-            } catch (err) {
-                console.warn("PL Stock fetch failed", err);
-                return [
-                    { symbol: 'PKO', price: 45.20, change: 1.10, name: 'PKO BP', ...generateHistory(45.20) },
-                    { symbol: 'KGH', price: 120.50, change: -2.30, name: 'KGHM', ...generateHistory(120.50) },
-                    { symbol: 'CDR', price: 115.00, change: 0.50, name: 'CD Projekt', ...generateHistory(115.00) }
-                ];
             }
+
+            setCache(cacheKey, results);
+            return results;
         };
 
         // --- Technical Indicators ---
