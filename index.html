@@ -388,10 +388,17 @@
             );
         };
 
-        const Header = ({ darkMode, toggleTheme, portfolio }) => (
+        const Header = ({ darkMode, toggleTheme, portfolio, appVersion }) => (
             <header class="flex justify-between items-end mb-8 border-b-2 border-black dark:border-white pb-4 px-8 pt-6">
                 <div>
-                    <h1 class="text-4xl font-extrabold tracking-tighter uppercase dark:text-white">Trade<span class="text-gray-400">.io</span></h1>
+                    <h1 class="text-4xl font-extrabold tracking-tighter uppercase dark:text-white flex items-center gap-2">
+                        Trade<span class="text-gray-400">.io</span>
+                        {appVersion && (
+                            <span class="text-[10px] bg-gray-200 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-sm font-mono tracking-normal leading-none self-start mt-2 border border-gray-300 dark:border-zinc-700">
+                                v.{appVersion}
+                            </span>
+                        )}
+                    </h1>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Professional Trading Environment</p>
                 </div>
                 <div class="flex items-end gap-8">
@@ -934,6 +941,14 @@
             const [marketData, setMarketData] = useState({ us: [], pl: [], crypto: [] });
             const [portfolio, setPortfolio] = useState({ cash: 100000, positions: [], history: [], equity: 100000 });
             const [portfolioLoaded, setPortfolioLoaded] = useState(false);
+            const [appVersion, setAppVersion] = useState('');
+
+            useEffect(() => {
+                fetch('/api/version')
+                    .then(res => res.json())
+                    .then(data => setAppVersion(data.version))
+                    .catch(err => console.error("Failed to load version", err));
+            }, []);
 
             // Fetch Portfolio on mount & Poll every 5s
             useEffect(() => {
@@ -1204,7 +1219,7 @@
 
 
 
-                        <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} />
+                        <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} appVersion={appVersion} />
 
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
                             <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />

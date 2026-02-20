@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { execSync } = require('child_process');
 // fetch is native in Node 22
 require('dotenv').config();
 const { getPortfolio, savePortfolio } = require('./db');
@@ -596,6 +597,18 @@ app.post('/api/trade', async (req, res) => {
 app.get('/ping', (req, res) => {
     console.log("Ping received (Keep-Alive)");
     res.send('pong');
+});
+
+// App Version (Git Hash)
+let appVersion = 'unknown';
+try {
+    appVersion = execSync('git rev-parse --short HEAD').toString().trim();
+} catch (e) {
+    console.error("Failed to get git version:", e.message);
+}
+
+app.get('/api/version', (req, res) => {
+    res.json({ version: appVersion });
 });
 
 const PORT = process.env.PORT || 3005;
