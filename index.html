@@ -621,19 +621,26 @@
             </div>
         );
 
-        const Settings = ({ marketData }) => {
+        const Settings = ({ marketData, config, updateConfig }) => {
             const getStatusColor = (data) => data && data.length > 0 ? 'bg-emerald-500' : 'bg-red-500';
 
             return (
                 <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm p-6 max-w-lg">
-                    <h2 class="text-xl font-bold mb-4 uppercase">Data Settings</h2>
+                    <h2 class="text-xl font-bold mb-4 uppercase">Settings</h2>
                     <div class="space-y-4">
-                        <div class="p-4 bg-gray-50 dark:bg-zinc-900 rounded-sm">
-                            <h3 class="font-bold mb-2">Data Source Configuration</h3>
-                            <p class="text-sm text-gray-600 dark:text-gray-400">
-                                We are now using <strong>Yahoo Finance (via Proxy)</strong> and <strong>CoinGecko</strong>.
-                                No API Keys are required for standard usage!
-                            </p>
+
+                        <div class="mb-4">
+                            <h3 class="text-sm font-bold mb-2">Robot Config</h3>
+                            <div class="flex gap-4 items-center text-xs font-mono">
+                                <label class="flex items-center gap-1">
+                                    Interval:
+                                    <select value={config.interval} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
+                                        <option value="10">10s</option>
+                                        <option value="30">30s</option>
+                                        <option value="60">60s</option>
+                                    </select>
+                                </label>
+                            </div>
                         </div>
 
                         <div class="pt-6 border-t border-gray-200 dark:border-zinc-700">
@@ -821,7 +828,7 @@
             );
         };
 
-        const MainContent = ({ activeTab, marketData, loading, portfolio, onOpenTrade, selectedAsset, onSelectAsset, onOpenAddCash }) => {
+        const MainContent = ({ activeTab, marketData, loading, portfolio, onOpenTrade, selectedAsset, onSelectAsset, onOpenAddCash, config, updateConfig }) => {
             const currentAsset = selectedAsset || (marketData.us[0] || { symbol: 'AAPL', price: 173.50, change: 1.25, name: 'Apple Inc.' });
 
             if (activeTab === 'Dashboard') {
@@ -861,7 +868,7 @@
             if (activeTab === 'Settings') {
                 return (
                     <section class="col-span-3 space-y-8">
-                        <Settings marketData={marketData} />
+                        <Settings marketData={marketData} config={config} updateConfig={updateConfig} />
                     </section>
                 );
             }
@@ -1057,11 +1064,18 @@
             // AUTO TRADING API LOGIC
             const toggleBot = () => {
                 fetch('/api/bot/toggle', { method: 'POST' })
-                    .then(res => res.json())
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status}: Server returned an error.`);
+                        return res.json();
+                    })
                     .then(data => {
                         setAutoTradeEnabled(data.enabled);
                         setConfig(data);
                         addToast(data.enabled ? 'Robot Started' : 'Robot Stopped', data.enabled ? 'success' : 'info');
+                    })
+                    .catch(e => {
+                        console.error("Toggle error:", e);
+                        addToast("Failed to toggle robot. Is the server running?", "error");
                     });
             };
 
@@ -1071,7 +1085,15 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(newConfig)
-                });
+                })
+                    .then(res => {
+                        if (!res.ok) throw new Error("Server error");
+                        return res.json();
+                    })
+                    .catch(e => {
+                        console.error("Config update error:", e);
+                        addToast("Failed to save config.", "error");
+                    });
             };
 
             // Local Timer for UI feedback only
@@ -1179,26 +1201,7 @@
                             </button>
                         </div>
 
-                        <div class="mb-4 text-right">
-                            <div class="inline-block bg-white dark:bg-zinc-800 p-2 rounded border border-gray-200 dark:border-zinc-700 text-xs shadow-sm">
-                                <h4 class="font-bold mb-1">Robot Config</h4>
-                                <div class="flex gap-4 items-center">
-                                    <label class="flex items-center gap-1">
-                                        Size:
-                                        <input type="range" min="5" max="20" step="1" value={config.posSizePct} onChange={e => updateConfig({ ...config, posSizePct: Number(e.target.value) })} />
-                                        {config.posSizePct}%
-                                    </label>
-                                    <label class="flex items-center gap-1">
-                                        Interval:
-                                        <select value={config.interval} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
-                                            <option value="10">10s</option>
-                                            <option value="30">30s</option>
-                                            <option value="60">60s</option>
-                                        </select>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
+
 
                         <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} />
 
@@ -1214,6 +1217,8 @@
                                 selectedAsset={selectedAsset}
                                 onSelectAsset={setSelectedAsset}
                                 onOpenAddCash={() => setIsAddCashOpen(true)}
+                                config={config}
+                                updateConfig={updateConfig}
                             />
                         </div>
                     </div>
