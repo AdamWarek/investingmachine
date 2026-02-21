@@ -449,27 +449,38 @@
                     chartRef.current.destroy();
                 }
 
-                // Generate mock history for the chart based on current price
-                const history = [];
-                let price = asset.price;
-                const now = new Date();
-                for (let i = 30; i >= 0; i--) {
-                    const date = new Date(now);
-                    date.setDate(date.getDate() - i);
-                    // Random walk
-                    price = price * (1 + (Math.random() - 0.5) * 0.05);
-                    history.push({ date: date.toLocaleDateString(), price });
+                // Use real history provided by the backend, or fallback to mock data
+                // For a smooth chart, we filter out any potential nulls, though the backend cleans it.
+                // The property names 'dates' and 'prices' are populated in server.js
+
+                let labels = [];
+                let dataPoints = [];
+
+                if (asset.dates && asset.prices && asset.dates.length > 0) {
+                    labels = asset.dates;
+                    dataPoints = asset.prices;
+                } else {
+                    // Fallback generating mock history if real data isn't loaded yet
+                    let price = asset.price;
+                    const now = new Date();
+                    for (let i = 30; i >= 0; i--) {
+                        const date = new Date(now);
+                        date.setDate(date.getDate() - i);
+                        price = price * (1 + (Math.random() - 0.5) * 0.05);
+                        labels.push(date.toLocaleDateString());
+                        dataPoints.push(price);
+                    }
+                    dataPoints[dataPoints.length - 1] = asset.price;
                 }
-                // Ensure last point matches current
-                history[history.length - 1].price = asset.price;
+
 
                 chartRef.current = new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: history.map(h => h.date),
+                        labels: labels,
                         datasets: [{
                             label: 'Price (USD)',
-                            data: history.map(h => h.price),
+                            data: dataPoints,
                             borderColor: asset.change >= 0 ? '#10b981' : '#ef4444',
                             backgroundColor: (context) => {
                                 const ctx = context.chart.ctx;
@@ -554,41 +565,55 @@
             </div>
         );
 
-        const PositionsTable = ({ positions, onOpenTrade }) => (
-            <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm overflow-hidden shadow-sm">
-                <div class="p-4 border-b border-gray-200 dark:border-zinc-700 font-bold uppercase tracking-wider text-sm">Active Positions</div>
-                {positions.length === 0 ? (
-                    <div class="p-8 text-center text-gray-500">No active positions</div>
-                ) : (
-                    <table class="w-full text-left">
-                        <thead class="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-700">
-                            <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                <th class="px-6 py-4">Instrument</th>
-                                <th class="px-6 py-4">Qty</th>
-                                <th class="px-6 py-4">Avg Buy</th>
-                                <th class="px-6 py-4">Current</th>
-                                <th class="px-6 py-4 text-right">Value</th>
-                                <th class="px-6 py-4 text-right">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100 dark:divide-zinc-700 font-mono text-sm">
-                            {positions.map((pos, idx) => (
-                                <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-zinc-700/50 transition">
-                                    <td class="px-6 py-4 font-bold text-sans">{pos.symbol}</td>
-                                    <td class="px-6 py-4">{pos.qty}</td>
-                                    <td class="px-6 py-4">{formatCurrency(pos.avgPrice)}</td>
-                                    <td class="px-6 py-4">{formatCurrency(pos.currentPrice || pos.avgPrice)}</td>
-                                    <td class="px-6 py-4 text-right font-bold">{formatCurrency(pos.qty * (pos.currentPrice || pos.avgPrice))}</td>
-                                    <td class="px-6 py-4 text-right">
-                                        <button onClick={() => onOpenTrade({ symbol: pos.symbol, price: pos.currentPrice || pos.avgPrice })} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>
-                                    </td>
+        const PositionsTable = ({ positions, marketData, onOpenTrade }) => {
+            const allAssets = marketData ? [...(marketData.us || []), ...(marketData.pl || []), ...(marketData.crypto || [])] : [];
+            return (
+                <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm overflow-hidden shadow-sm">
+                    <div class="p-4 border-b border-gray-200 dark:border-zinc-700 font-bold uppercase tracking-wider text-sm">Active Positions</div>
+                    {positions.length === 0 ? (
+                        <div class="p-8 text-center text-gray-500">No active positions</div>
+                    ) : (
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-700">
+                                <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                    <th class="px-6 py-4">Instrument</th>
+                                    <th class="px-6 py-4">Qty</th>
+                                    <th class="px-6 py-4">Avg Buy</th>
+                                    <th class="px-6 py-4">Current</th>
+                                    <th class="px-6 py-4 text-right">Value</th>
+                                    <th class="px-6 py-4 text-right">P/L</th>
+                                    <th class="px-6 py-4 text-right">Action</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                )}
-            </div>
-        );
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-zinc-700 font-mono text-sm">
+                                {positions.map((pos, idx) => {
+                                    const asset = allAssets.find(a => a.symbol === pos.symbol);
+                                    const currentPrice = asset ? asset.price : (pos.currentPrice || pos.avgPrice);
+                                    const pl = (currentPrice - pos.avgPrice) * pos.qty;
+                                    const plPct = pos.avgPrice > 0 ? ((currentPrice - pos.avgPrice) / pos.avgPrice) * 100 : 0;
+                                    return (
+                                        <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-zinc-700/50 transition">
+                                            <td class="px-6 py-4 font-bold text-sans">{pos.symbol}</td>
+                                            <td class="px-6 py-4">{pos.qty}</td>
+                                            <td class="px-6 py-4">{formatCurrency(pos.avgPrice)}</td>
+                                            <td class="px-6 py-4">{formatCurrency(currentPrice)}</td>
+                                            <td class="px-6 py-4 text-right font-bold">{formatCurrency(pos.qty * currentPrice)}</td>
+                                            <td class={`px-6 py-4 text-right font-bold ${pl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                {pl >= 0 ? '+' : ''}{formatCurrency(pl)}<br />
+                                                <span class="text-xs opacity-80">{pl >= 0 ? '+' : ''}{plPct.toFixed(2)}%</span>
+                                            </td>
+                                            <td class="px-6 py-4 text-right">
+                                                <button onClick={() => onOpenTrade({ symbol: pos.symbol, price: currentPrice })} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+            );
+        };
 
         const HistoryTable = ({ history }) => (
             <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm overflow-hidden shadow-sm">
@@ -630,42 +655,90 @@
 
         const Settings = ({ marketData, config, updateConfig }) => {
             const getStatusColor = (data) => data && data.length > 0 ? 'bg-emerald-500' : 'bg-red-500';
+            const [botLogs, setBotLogs] = useState([]);
+
+            // Poll bot logs only when Settings tab is active
+            useEffect(() => {
+                const fetchLogs = () => {
+                    fetch('/api/bot/logs')
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data && Array.isArray(data)) {
+                                setBotLogs(data);
+                            }
+                        })
+                        .catch(err => console.error("Failed to load bot logs:", err));
+                };
+
+                fetchLogs(); // Initial
+                const logIntervalId = setInterval(fetchLogs, 3000); // Every 3s
+                return () => clearInterval(logIntervalId);
+            }, []);
 
             return (
-                <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm p-6 max-w-lg">
-                    <h2 class="text-xl font-bold mb-4 uppercase">Settings</h2>
-                    <div class="space-y-4">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm p-6 max-w-lg">
+                        <h2 class="text-xl font-bold mb-4 uppercase">Settings</h2>
+                        <div class="space-y-4">
 
-                        <div class="mb-4">
-                            <h3 class="text-sm font-bold mb-2">Robot Config</h3>
-                            <div class="flex gap-4 items-center text-xs font-mono">
-                                <label class="flex items-center gap-1">
-                                    Interval:
-                                    <select value={config.interval} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
-                                        <option value="10">10s</option>
-                                        <option value="30">30s</option>
-                                        <option value="60">60s</option>
-                                    </select>
-                                </label>
+                            <div class="mb-4">
+                                <h3 class="text-sm font-bold mb-2">Robot Config</h3>
+                                <div class="flex gap-4 items-center text-xs font-mono">
+                                    <label class="flex items-center gap-1">
+                                        Interval:
+                                        <select value={config.interval} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
+                                            <option value="10">10s</option>
+                                            <option value="30">30s</option>
+                                            <option value="60">60s</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="pt-6 border-t border-gray-200 dark:border-zinc-700">
+                                <h3 class="text-sm font-bold mb-2">API Status</h3>
+                                <ul class="text-xs space-y-2 text-gray-500 font-mono">
+                                    <li class="flex items-center gap-2">
+                                        <span class={`w-3 h-3 rounded-full ${marketData?.crypto?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                        Crypto: CoinGecko (Public API)
+                                    </li>
+                                    <li class="flex items-center gap-2">
+                                        <span class={`w-3 h-3 rounded-full ${marketData?.us?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                        US Stocks: Yahoo Finance via Proxy
+                                    </li>
+                                    <li class="flex items-center gap-2">
+                                        <span class={`w-3 h-3 rounded-full ${marketData?.pl?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                        PL Stocks: Yahoo Finance via Proxy
+                                    </li>
+                                </ul>
                             </div>
                         </div>
+                    </div>
 
-                        <div class="pt-6 border-t border-gray-200 dark:border-zinc-700">
-                            <h3 class="text-sm font-bold mb-2">API Status</h3>
-                            <ul class="text-xs space-y-2 text-gray-500 font-mono">
-                                <li class="flex items-center gap-2">
-                                    <span class={`w-3 h-3 rounded-full ${marketData?.crypto?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                    Crypto: CoinGecko (Public API)
-                                </li>
-                                <li class="flex items-center gap-2">
-                                    <span class={`w-3 h-3 rounded-full ${marketData?.us?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                    US Stocks: Yahoo Finance via Proxy
-                                </li>
-                                <li class="flex items-center gap-2">
-                                    <span class={`w-3 h-3 rounded-full ${marketData?.pl?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                    PL Stocks: Yahoo Finance via Proxy
-                                </li>
-                            </ul>
+                    {/* Live Terminal UI */}
+                    <div class="bg-black border border-zinc-700 rounded-sm p-4 overflow-hidden flex flex-col h-[400px] shadow-lg">
+                        <div class="flex justify-between items-center mb-2 pb-2 border-b border-zinc-800">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-gray-400 font-mono uppercase tracking-widest font-bold">Terminal / Live View</span>
+                            </div>
+                            <div class="flex gap-1">
+                                <div class="w-3 h-3 rounded-full bg-red-500 opacity-50"></div>
+                                <div class="w-3 h-3 rounded-full bg-yellow-500 opacity-50"></div>
+                                <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto font-mono text-xs text-emerald-400 space-y-1 pr-2 custom-scrollbar flex flex-col-reverse">
+                            {botLogs.length === 0 ? (
+                                <div class="text-gray-600 italic">No logs captured yet. Turn on the robot and wait for the first cycle...</div>
+                            ) : (
+                                // Render logs backwards (newest at bottom by default due to flex-col-reverse, so we reverse the array to keep newest at bottom )
+                                [...botLogs].reverse().map((log, idx) => (
+                                    <div key={idx} class="break-words">
+                                        <span class="text-gray-500 mr-2">[{new Date(log.time).toLocaleTimeString()}]</span>
+                                        {log.msg}
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>
@@ -858,7 +931,7 @@
                                 </button>
                             </div>
                         </div>
-                        <PositionsTable positions={portfolio.positions} onOpenTrade={onOpenTrade} />
+                        <PositionsTable positions={portfolio.positions} marketData={marketData} onOpenTrade={onOpenTrade} />
                         <MarketTable title="Top Movers" data={marketData.us.slice(0, 3)} loading={loading} onOpenTrade={onOpenTrade} onSelect={onSelectAsset} />
                     </section>
                 );

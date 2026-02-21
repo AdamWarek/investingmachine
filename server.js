@@ -386,7 +386,7 @@ const executeTrade = async (asset, mode, qty, reason) => {
                 portfolio.positions.push({ symbol: asset.symbol, qty, avgPrice: price });
             }
             portfolio.history.push({ date: new Date(), type: 'BUY', symbol: asset.symbol, qty, price, reason });
-            console.log(`ROBOT: Bought ${asset.symbol} - ${reason}`);
+            botLogger(`ROBOT: Bought ${asset.symbol} - ${reason}`);
 
         } else {
             const pos = portfolio.positions.find(p => p.symbol === asset.symbol);
@@ -399,7 +399,7 @@ const executeTrade = async (asset, mode, qty, reason) => {
                 pos.qty -= qty;
             }
             portfolio.history.push({ date: new Date(), type: 'SELL', symbol: asset.symbol, qty, price, reason });
-            console.log(`ROBOT: Sold ${asset.symbol} - ${reason}`);
+            botLogger(`ROBOT: Sold ${asset.symbol} - ${reason}`);
         }
 
         // Recalc Equity
@@ -427,13 +427,24 @@ let botConfig = {
     tpPct: 5
 };
 
+// --- Bot Live Logging ---
+const botLogs = [];
+const MAX_BOT_LOGS = 100;
+const botLogger = (message) => {
+    botLogs.push({ time: Date.now(), msg: message });
+    if (botLogs.length > MAX_BOT_LOGS) {
+        botLogs.shift();
+    }
+    console.log(message);
+};
+
 const runAutoTrading = async () => {
     if (!botConfig.enabled) return;
-    console.log("ROBOT: Running trading cycle...");
+    botLogger("ROBOT: Running trading cycle...");
 
     const portfolio = await getPortfolio();
     const allAssets = [...marketData.us, ...marketData.pl, ...marketData.crypto];
-    console.log(`ROBOT: Checking ${allAssets.length} assets against ${portfolio.positions.length} open positions.`);
+    botLogger(`ROBOT: Checking ${allAssets.length} assets against ${portfolio.positions.length} open positions.`);
 
     // 1. AUTO-SELL CHECKS
     for (const pos of portfolio.positions) {
@@ -464,14 +475,14 @@ const runAutoTrading = async () => {
     const scored = allAssets.map(a => ({ asset: a, ...calculateScore(a) }));
     const candidates = scored.filter(s => s.score > 60);
     candidates.sort((a, b) => b.score - a.score);
-    console.log(`ROBOT: Found ${candidates.length} buy candidates with score > 60.`);
+    botLogger(`ROBOT: Found ${candidates.length} buy candidates with score > 60.`);
 
     let availableCash = updatedPortfolio.cash;
-    console.log(`ROBOT: Available cash: $${availableCash.toFixed(2)}`);
+    botLogger(`ROBOT: Available cash: $${availableCash.toFixed(2)}`);
 
     if (candidates.length > 0 && availableCash > 500) {
         const best = candidates[0];
-        console.log(`ROBOT: Top candidate is ${best.asset.symbol} with score ${best.score}. Currently held: ${!!updatedPortfolio.positions.find(p => p.symbol === best.asset.symbol)}`);
+        botLogger(`ROBOT: Top candidate is ${best.asset.symbol} with score ${best.score}. Currently held: ${!!updatedPortfolio.positions.find(p => p.symbol === best.asset.symbol)}`);
 
         if (!updatedPortfolio.positions.find(p => p.symbol === best.asset.symbol)) {
             const sizeAmt = updatedPortfolio.equity * (botConfig.posSizePct / 100);
@@ -480,7 +491,7 @@ const runAutoTrading = async () => {
             if (qty > 0 && availableCash > (qty * best.asset.price)) {
                 await executeTrade(best.asset, 'BUY', qty, `Score: ${best.score} (${best.reasons.join(', ')})`);
             } else {
-                console.log(`ROBOT: Wanted to buy ${best.asset.symbol} but couldn't afford calculated qty ${qty}.`);
+                botLogger(`ROBOT: Wanted to buy ${best.asset.symbol} but couldn't afford calculated qty ${qty}.`);
             }
         }
     }
@@ -497,6 +508,10 @@ const updateBotTimer = () => {
 // API routes for Bot Control
 app.get('/api/bot/config', (req, res) => {
     res.json(botConfig);
+});
+
+app.get('/api/bot/logs', (req, res) => {
+    res.json(botLogs);
 });
 
 app.post('/api/bot/toggle', (req, res) => {
