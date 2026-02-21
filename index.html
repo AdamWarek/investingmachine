@@ -1079,11 +1079,19 @@
         // --- Toast Notification Component ---
         const ToastContainer = ({ toasts }) => (
             <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-                {toasts.map(t => (
-                    <div key={t.id} class={`p-4 rounded-sm shadow-lg border-l-4 text-sm font-bold pointer-events-auto animate-bounce ${t.type === 'error' ? 'bg-white border-red-500 text-red-600' : 'bg-white border-emerald-500 text-emerald-600'} dark:bg-zinc-800 dark:text-gray-100`}>
-                        {t.message}
-                    </div>
-                ))}
+                {toasts.map(t => {
+                    const borderColor =
+                        t.type === 'error' ? 'border-red-500' :
+                            t.type === 'buy' ? 'border-emerald-500' :
+                                t.type === 'sell' ? 'border-orange-400' :
+                                    'border-blue-500';
+                    return (
+                        <div key={t.id} class={`p-4 rounded-sm shadow-lg border-l-4 pointer-events-auto animate-bounce bg-white dark:bg-zinc-800 ${borderColor}`}>
+                            <div class="text-sm font-bold text-gray-900 dark:text-gray-100">{t.title || t.message}</div>
+                            {t.subtitle && <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">{t.subtitle}</div>}
+                        </div>
+                    );
+                })}
             </div>
         );
 
@@ -1119,11 +1127,39 @@
                                     const prevDataStr = JSON.stringify(prev);
 
                                     if (newDataStr !== prevDataStr) {
-                                        return {
+                                        const newData = {
                                             ...data,
                                             history: data.history || [],
                                             positions: data.positions || []
                                         };
+
+                                        // Detect new bot-executed trades and fire toasts
+                                        const prevLen = prev.history.length;
+                                        const newLen = newData.history.length;
+                                        if (newLen > prevLen) {
+                                            const newTrades = newData.history.slice(prevLen);
+                                            newTrades.forEach(tx => {
+                                                if (tx.type === 'BUY') {
+                                                    addToast({
+                                                        title: `🤖 Robot Bought ${tx.symbol}`,
+                                                        subtitle: `Qty: ${tx.qty} @ ${formatCurrency(tx.price)}`,
+                                                        type: 'buy'
+                                                    });
+                                                } else if (tx.type === 'SELL') {
+                                                    const prevPos = prev.positions.find(p => p.symbol === tx.symbol);
+                                                    const avgPrice = prevPos ? prevPos.avgPrice : tx.price;
+                                                    const pl = (tx.price - avgPrice) * tx.qty;
+                                                    const plStr = (pl >= 0 ? '+' : '') + formatCurrency(pl);
+                                                    addToast({
+                                                        title: `🤖 Robot Sold ${tx.symbol}`,
+                                                        subtitle: `Qty: ${tx.qty} | P/L: ${plStr}`,
+                                                        type: 'sell'
+                                                    });
+                                                }
+                                            });
+                                        }
+
+                                        return newData;
                                     }
                                     return prev;
                                 });
@@ -1165,9 +1201,12 @@
             }, []);
             const [toasts, setToasts] = useState([]);
 
-            const addToast = (message, type = 'info') => {
+            const addToast = (msgOrObj, type = 'info') => {
                 const id = Date.now() + Math.random();
-                setToasts(prev => [...prev, { id, message, type }]);
+                const toast = typeof msgOrObj === 'string'
+                    ? { id, message: msgOrObj, type }
+                    : { id, ...msgOrObj };
+                setToasts(prev => [...prev, toast]);
                 setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
             };
 
@@ -1230,8 +1269,24 @@
                         addToast(data.error, 'error');
                         return;
                     }
+                    if (mode === 'BUY') {
+                        addToast({
+                            title: `📈 Bought ${asset.symbol}`,
+                            subtitle: `Qty: ${qty} @ ${formatCurrency(asset.price)} = ${formatCurrency(qty * asset.price)}`,
+                            type: 'buy'
+                        });
+                    } else {
+                        const prevPos = portfolio.positions.find(p => p.symbol === asset.symbol);
+                        const avgPrice = prevPos ? prevPos.avgPrice : asset.price;
+                        const pl = (asset.price - avgPrice) * qty;
+                        const plStr = (pl >= 0 ? '+' : '') + formatCurrency(pl);
+                        addToast({
+                            title: `📉 Sold ${asset.symbol}`,
+                            subtitle: `Qty: ${qty} | P/L: ${plStr}`,
+                            type: 'sell'
+                        });
+                    }
                     setPortfolio(data.portfolio);
-                    addToast(`Manual ${mode}: ${asset.symbol}`, mode === 'BUY' ? 'success' : 'info');
                 } catch (e) {
                     addToast("Trade failed", 'error');
                 }
