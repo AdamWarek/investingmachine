@@ -608,8 +608,15 @@
                                     <div class="text-xs text-gray-500 dark:text-gray-400 font-sans">{item.name}</div>
                                 </td>
                                 <td class="px-6 py-4">{formatCurrency(item.price)}</td>
-                                <td class={`px-6 py-4 ${item.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                    {formatPct(item.change)}
+                                <td class="px-6 py-4">
+                                    <div class={item.change >= 0 ? 'text-emerald-500' : 'text-red-500'}>
+                                        {formatPct(item.change)}
+                                    </div>
+                                    {item.lastUpdate && (
+                                        <div class="text-[10px] text-gray-400 mt-1 whitespace-nowrap">
+                                            {new Date(item.lastUpdate).toLocaleString()}
+                                        </div>
+                                    )}
                                 </td>
                                 <td class="px-6 py-4 text-right">
                                     <button onClick={(e) => { e.stopPropagation(); onOpenTrade(item); }} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>
@@ -657,6 +664,11 @@
                                             <td class={`px-6 py-4 text-right font-bold ${pl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                                                 {pl >= 0 ? '+' : ''}{formatCurrency(pl)}<br />
                                                 <span class="text-xs opacity-80">{pl >= 0 ? '+' : ''}{plPct.toFixed(2)}%</span>
+                                                {asset && asset.lastUpdate && (
+                                                    <div class="text-[10px] text-gray-400 mt-1 font-normal whitespace-nowrap">
+                                                        {new Date(asset.lastUpdate).toLocaleString()}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td class="px-6 py-4 text-right">
                                                 <button onClick={() => onOpenTrade({ symbol: pos.symbol, price: currentPrice })} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>

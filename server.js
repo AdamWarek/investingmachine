@@ -47,7 +47,7 @@ const generateHistory = (currentPrice) => {
         p = close; // walk back
     }
     prices[prices.length - 1] = currentPrice;
-    return { dates, prices, opens, highs, lows, volumes };
+    return { dates, prices, opens, highs, lows, volumes, lastUpdate: new Date().toISOString() };
 };
 
 // Real Data Fetcher (Yahoo Finance direct)
@@ -83,6 +83,7 @@ const fetchYahooHistory = async (symbol, interval = '1d', range = '3mo') => {
             cleanData.highs.push(quote.high[i]);
             cleanData.lows.push(quote.low[i]);
             cleanData.volumes.push(quote.volume[i]);
+            cleanData.lastUpdate = date.toISOString();
         }
         return cleanData;
     } catch (e) {
@@ -101,7 +102,7 @@ const fetchCrypto = async () => {
             const lastPrice = history.prices[history.prices.length - 1];
             const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
             const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-            results.push({ symbol: displaySymbol, name: displaySymbol, price: lastPrice, change: change, ...history });
+            results.push({ symbol: displaySymbol, name: displaySymbol, price: lastPrice, change: change, lastUpdate: history.lastUpdate, ...history });
         } else {
             results.push({ symbol: displaySymbol, price: 0, change: 0, name: symbol, ...generateHistory(1000) });
         }
@@ -118,7 +119,7 @@ const fetchUSStocks = async () => {
             const lastPrice = history.prices[history.prices.length - 1];
             const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
             const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-            results.push({ symbol, name: symbol, price: lastPrice, change: change, ...history });
+            results.push({ symbol, name: symbol, price: lastPrice, change: change, lastUpdate: history.lastUpdate, ...history });
         } else {
             results.push({ symbol, price: 0, change: 0, name: symbol, ...generateHistory(100) });
         }
@@ -136,7 +137,7 @@ const fetchPLStocks = async () => {
             const lastPrice = history.prices[history.prices.length - 1];
             const prevPrice = history.prices[history.prices.length - 2] || lastPrice;
             const change = ((lastPrice - prevPrice) / prevPrice) * 100;
-            results.push({ symbol: shortSymbol, name: symbol, price: lastPrice, change: change, ...history });
+            results.push({ symbol: shortSymbol, name: symbol, price: lastPrice, change: change, lastUpdate: history.lastUpdate, ...history });
         } else {
             results.push({ symbol: shortSymbol, price: 0, change: 0, name: symbol, ...generateHistory(50) });
         }
