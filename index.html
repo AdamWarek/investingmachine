@@ -751,14 +751,26 @@
 
                             <div class="mb-4">
                                 <h3 class="text-sm font-bold mb-2">Robot Config</h3>
-                                <div class="flex gap-4 items-center text-xs font-mono">
+                                <div class="flex flex-wrap gap-4 items-center text-xs font-mono">
                                     <label class="flex items-center gap-1">
                                         Interval:
-                                        <select value={config.interval} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
+                                        <select value={config.interval || 60} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
                                             <option value="10">10s</option>
                                             <option value="30">30s</option>
                                             <option value="60">60s</option>
                                         </select>
+                                    </label>
+                                    <label class="flex items-center gap-1" title="Stop Loss Percentage">
+                                        SL %:
+                                        <input type="number" min="0.1" step="0.1" value={config.slPct || 3} onChange={e => updateConfig({ ...config, slPct: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1 w-16 text-right border border-gray-300 dark:border-zinc-600 rounded-sm" />
+                                    </label>
+                                    <label class="flex items-center gap-1" title="Take Profit Percentage">
+                                        TP %:
+                                        <input type="number" min="0.1" step="0.1" value={config.tpPct || 5} onChange={e => updateConfig({ ...config, tpPct: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1 w-16 text-right border border-gray-300 dark:border-zinc-600 rounded-sm" />
+                                    </label>
+                                    <label class="flex items-center gap-1" title="Minimum Score to Buy">
+                                        Buy Score:
+                                        <input type="number" min="10" max="100" step="5" value={config.buyScore || 60} onChange={e => updateConfig({ ...config, buyScore: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1 w-16 text-right border border-gray-300 dark:border-zinc-600 rounded-sm" />
                                     </label>
                                 </div>
                             </div>

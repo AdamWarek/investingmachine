@@ -425,7 +425,8 @@ let botConfig = {
     interval: 60, // seconds
     posSizePct: 10,
     slPct: 3,
-    tpPct: 5
+    tpPct: 5,
+    buyScore: 60
 };
 
 // --- Bot Live Logging ---
@@ -474,9 +475,9 @@ const runAutoTrading = async () => {
 
     // 2. AUTO-BUY CHECKS
     const scored = allAssets.map(a => ({ asset: a, ...calculateScore(a) }));
-    const candidates = scored.filter(s => s.score > 60);
+    const candidates = scored.filter(s => s.score >= botConfig.buyScore);
     candidates.sort((a, b) => b.score - a.score);
-    botLogger(`ROBOT: Found ${candidates.length} buy candidates with score > 60.`);
+    botLogger(`ROBOT: Found ${candidates.length} buy candidates with score >= ${botConfig.buyScore}.`);
 
     let availableCash = updatedPortfolio.cash;
     botLogger(`ROBOT: Available cash: $${availableCash.toFixed(2)}`);
@@ -485,15 +486,13 @@ const runAutoTrading = async () => {
         const best = candidates[0];
         botLogger(`ROBOT: Top candidate is ${best.asset.symbol} with score ${best.score}. Currently held: ${!!updatedPortfolio.positions.find(p => p.symbol === best.asset.symbol)}`);
 
-        if (!updatedPortfolio.positions.find(p => p.symbol === best.asset.symbol)) {
-            const sizeAmt = updatedPortfolio.equity * (botConfig.posSizePct / 100);
-            const qty = Math.floor(sizeAmt / best.asset.price);
+        const sizeAmt = updatedPortfolio.equity * (botConfig.posSizePct / 100);
+        const qty = Math.floor(sizeAmt / best.asset.price);
 
-            if (qty > 0 && availableCash > (qty * best.asset.price)) {
-                await executeTrade(best.asset, 'BUY', qty, `Score: ${best.score} (${best.reasons.join(', ')})`);
-            } else {
-                botLogger(`ROBOT: Wanted to buy ${best.asset.symbol} but couldn't afford calculated qty ${qty}.`);
-            }
+        if (qty > 0 && availableCash > (qty * best.asset.price)) {
+            await executeTrade(best.asset, 'BUY', qty, `Score: ${best.score} (${best.reasons.join(', ')})`);
+        } else {
+            botLogger(`ROBOT: Wanted to buy ${best.asset.symbol} but couldn't afford calculated qty ${qty}.`);
         }
     }
 };
