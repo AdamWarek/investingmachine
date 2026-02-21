@@ -51,9 +51,9 @@ const generateHistory = (currentPrice) => {
 };
 
 // Real Data Fetcher (Yahoo Finance direct)
-const fetchYahooHistory = async (symbol) => {
+const fetchYahooHistory = async (symbol, interval = '1d', range = '3mo') => {
     try {
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`;
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=${interval}&range=${range}`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3500);
 
@@ -533,6 +533,23 @@ fetchMarketData();
 setInterval(fetchMarketData, 15 * 60 * 1000);
 
 // --- API ---
+
+app.get('/api/history/:symbol', async (req, res) => {
+    const symbol = req.params.symbol;
+    const interval = req.query.interval || '1d';
+    const range = req.query.range || '3mo';
+
+    try {
+        const history = await fetchYahooHistory(symbol, interval, range);
+        if (history) {
+            res.json(history);
+        } else {
+            res.status(500).json({ error: "Failed to fetch history" });
+        }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 app.get('/api/market-data', (req, res) => {
     res.json(marketData);

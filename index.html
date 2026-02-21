@@ -388,7 +388,7 @@
             );
         };
 
-        const Header = ({ darkMode, toggleTheme, portfolio, appVersion }) => (
+        const Header = ({ darkMode, toggleTheme, portfolio, liveEquity, appVersion }) => (
             <header class="flex justify-between items-end mb-8 border-b-2 border-black dark:border-white pb-4 px-8 pt-6">
                 <div>
                     <h1 class="text-4xl font-extrabold tracking-tighter uppercase dark:text-white flex items-center gap-2">
@@ -404,7 +404,7 @@
                 <div class="flex items-end gap-8">
                     <div class="text-right">
                         <div class="text-xs uppercase font-bold text-gray-400 tracking-widest mb-1">Total Equity</div>
-                        <div class="text-3xl font-bold font-mono tracking-tight">{formatCurrency(portfolio.equity)}</div>
+                        <div class="text-3xl font-bold font-mono tracking-tight">{formatCurrency(liveEquity !== undefined ? liveEquity : portfolio.equity)}</div>
                         <div class="text-sm font-medium mt-1 flex items-center justify-end gap-1 font-mono">
                             <span class="text-gray-500">Cash: {formatCurrency(portfolio.cash)}</span>
                         </div>
@@ -438,29 +438,64 @@
         const ChartComponent = ({ asset }) => {
             const canvasRef = React.useRef(null);
             const chartRef = React.useRef(null);
+            const [timeframe, setTimeframe] = useState('1D');
+            const [chartData, setChartData] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
+
+            const timeframes = [
+                { label: '1D', range: '1d', interval: '5m' },
+                { label: '1W', range: '5d', interval: '15m' },
+                { label: '1M', range: '1mo', interval: '1d' },
+                { label: '3M', range: '3mo', interval: '1d' },
+                { label: '1Y', range: '1y', interval: '1wk' },
+                { label: 'ALL', range: 'max', interval: '1mo' }
+            ];
+
+            React.useEffect(() => {
+                let isMounted = true;
+                const fetchData = async () => {
+                    if (!asset) return;
+                    setIsLoading(true);
+                    try {
+                        const tf = timeframes.find(t => t.label === timeframe) || timeframes[0];
+                        const res = await fetch(`/api/history/${asset.symbol}?range=${tf.range}&interval=${tf.interval}`);
+                        if (res.ok) {
+                            const data = await res.json();
+                            if (isMounted) setChartData({ dates: data.dates, prices: data.prices });
+                        } else {
+                            if (isMounted) setChartData({ dates: asset.dates, prices: asset.prices });
+                        }
+                    } catch (e) {
+                        if (isMounted) setChartData({ dates: asset.dates, prices: asset.prices });
+                    } finally {
+                        if (isMounted) setIsLoading(false);
+                    }
+                };
+                fetchData();
+                return () => { isMounted = false; };
+            }, [asset, timeframe]);
 
             React.useEffect(() => {
                 if (!canvasRef.current || !asset) return;
 
                 const ctx = canvasRef.current.getContext('2d');
 
-                // Destroy previous chart
                 if (chartRef.current) {
                     chartRef.current.destroy();
                 }
 
-                // Use real history provided by the backend, or fallback to mock data
-                // For a smooth chart, we filter out any potential nulls, though the backend cleans it.
-                // The property names 'dates' and 'prices' are populated in server.js
-
                 let labels = [];
                 let dataPoints = [];
 
-                if (asset.dates && asset.prices && asset.dates.length > 0) {
+                if (chartData && chartData.dates && chartData.prices && chartData.dates.length > 0) {
+                    labels = chartData.dates;
+                    dataPoints = chartData.prices;
+                } else if (asset.dates && asset.prices && asset.dates.length > 0) {
+                    // Fallback to loaded asset history if chartData is empty or fails
                     labels = asset.dates;
                     dataPoints = asset.prices;
                 } else {
-                    // Fallback generating mock history if real data isn't loaded yet
+                    // General offline fallback generating mock history 
                     let price = asset.price;
                     const now = new Date();
                     for (let i = 30; i >= 0; i--) {
@@ -472,7 +507,6 @@
                     }
                     dataPoints[dataPoints.length - 1] = asset.price;
                 }
-
 
                 chartRef.current = new Chart(ctx, {
                     type: 'line',
@@ -525,9 +559,31 @@
                 return () => {
                     if (chartRef.current) chartRef.current.destroy();
                 };
-            }, [asset]); // Re-render when asset changes
+            }, [asset, chartData]); // Re-render when asset or chartData changes
 
-            return <canvas ref={canvasRef} />;
+            return (
+                <div class="w-full h-full flex flex-col relative group">
+                    <div class="absolute top-2 right-2 z-10 flex gap-1 bg-white/50 dark:bg-black/50 p-1 rounded backdrop-blur border border-gray-200 dark:border-zinc-700 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                        {timeframes.map(tf => (
+                            <button
+                                key={tf.label}
+                                onClick={() => setTimeframe(tf.label)}
+                                class={`px-2 py-1 text-[10px] font-bold rounded transition ${timeframe === tf.label ? 'bg-black text-white dark:bg-white dark:text-black shadow' : 'text-gray-500 hover:bg-gray-200 dark:hover:bg-zinc-700 hover:text-gray-900 dark:hover:text-gray-100'}`}
+                            >
+                                {tf.label}
+                            </button>
+                        ))}
+                    </div>
+                    {isLoading && (
+                        <div class="absolute inset-0 flex items-center justify-center bg-white/20 dark:bg-black/20 z-20 backdrop-blur-[1px] rounded-sm">
+                            <span class="animate-pulse font-bold text-xs uppercase tracking-widest bg-white dark:bg-zinc-900 px-4 py-2 rounded shadow border border-gray-200 dark:border-zinc-700">Loading...</span>
+                        </div>
+                    )}
+                    <div class="flex-1 relative w-full h-full mt-2 pb-2">
+                        <canvas ref={canvasRef} />
+                    </div>
+                </div>
+            );
         };
 
         const MarketTable = ({ title, data, loading, onOpenTrade, onSelect }) => (
@@ -908,7 +964,7 @@
             );
         };
 
-        const MainContent = ({ activeTab, marketData, loading, portfolio, onOpenTrade, selectedAsset, onSelectAsset, onOpenAddCash, config, updateConfig }) => {
+        const MainContent = ({ activeTab, marketData, loading, portfolio, liveEquity, onOpenTrade, selectedAsset, onSelectAsset, onOpenAddCash, config, updateConfig }) => {
             const currentAsset = selectedAsset || (marketData.us[0] || { symbol: 'AAPL', price: 173.50, change: 1.25, name: 'Apple Inc.' });
 
             if (activeTab === 'Dashboard') {
@@ -917,7 +973,7 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 p-6 rounded-sm shadow-sm">
                                 <span class="text-xs uppercase font-bold text-gray-400">Total Equity</span>
-                                <div class="text-2xl font-bold font-mono">{formatCurrency(portfolio.equity)}</div>
+                                <div class="text-2xl font-bold font-mono">{formatCurrency(liveEquity !== undefined ? liveEquity : portfolio.equity)}</div>
                             </div>
                             <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 p-6 rounded-sm shadow-sm relative group">
                                 <span class="text-xs uppercase font-bold text-gray-400">Available Cash</span>
@@ -1206,28 +1262,19 @@
                 return () => clearInterval(intervalId);
             }, [autoTradeEnabled, loading, config.interval]);
 
-            // Update Equity Effect (Local Only - DB save handled by backend now)
-            useEffect(() => {
-                if (!portfolioLoaded || loading) return;
-
+            // Calculate live equity
+            const liveEquity = useMemo(() => {
                 let positionValue = 0;
-                const allAssets = [...marketData.us, ...marketData.pl, ...marketData.crypto];
-                if (allAssets.length === 0) return;
+                const allAssets = marketData ? [...(marketData.us || []), ...(marketData.pl || []), ...(marketData.crypto || [])] : [];
 
-                const newPositions = portfolio.positions.map(p => {
+                (portfolio.positions || []).forEach(p => {
                     const asset = allAssets.find(a => a.symbol === p.symbol);
                     const currentPrice = asset ? asset.price : p.avgPrice;
                     positionValue += p.qty * currentPrice;
-                    return { ...p, currentPrice };
                 });
 
-                const newEquity = portfolio.cash + positionValue;
-
-                // Only update state if equity actually changed to avoid infinite render loops
-                if (Math.abs(portfolio.equity - newEquity) > 0.01) {
-                    setPortfolio(prev => ({ ...prev, equity: newEquity, positions: newPositions }));
-                }
-            }, [portfolioLoaded, marketData, loading]); // Safely track market data updates
+                return portfolio.cash + positionValue;
+            }, [portfolio.positions, portfolio.cash, marketData]);
 
 
             // Theme Toggle
@@ -1292,7 +1339,7 @@
 
 
 
-                        <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} appVersion={appVersion} />
+                        <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} liveEquity={liveEquity} appVersion={appVersion} />
 
                         <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
                             <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -1302,12 +1349,14 @@
                                 marketData={marketData}
                                 loading={loading}
                                 portfolio={portfolio}
+                                liveEquity={liveEquity}
                                 onOpenTrade={setTradeAsset}
                                 selectedAsset={selectedAsset}
                                 onSelectAsset={setSelectedAsset}
                                 onOpenAddCash={() => setIsAddCashOpen(true)}
                                 config={config}
                                 updateConfig={updateConfig}
+
                             />
                         </div>
                     </div>
