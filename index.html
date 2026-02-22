@@ -389,9 +389,9 @@
         };
 
         const Header = ({ darkMode, toggleTheme, portfolio, liveEquity, appVersion }) => (
-            <header class="flex justify-between items-end mb-8 border-b-2 border-black dark:border-white pb-4 px-8 pt-6">
+            <header class="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-4 sm:mb-8 border-b-2 border-black dark:border-white pb-4 px-4 sm:px-8 pt-4 sm:pt-6 gap-3">
                 <div>
-                    <h1 class="text-4xl font-extrabold tracking-tighter uppercase dark:text-white flex items-center gap-2">
+                    <h1 class="text-2xl sm:text-4xl font-extrabold tracking-tighter uppercase dark:text-white flex items-center gap-2">
                         Trade<span class="text-gray-400">.io</span>
                         {appVersion && (
                             <span class="text-[10px] bg-gray-200 dark:bg-zinc-800 text-gray-500 dark:text-gray-400 px-2 py-1 rounded-sm font-mono tracking-normal leading-none self-start mt-2 border border-gray-300 dark:border-zinc-700">
@@ -401,11 +401,11 @@
                     </h1>
                     <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Professional Trading Environment</p>
                 </div>
-                <div class="flex items-end gap-8">
-                    <div class="text-right">
+                <div class="flex items-center sm:items-end gap-4 sm:gap-8">
+                    <div class="sm:text-right">
                         <div class="text-xs uppercase font-bold text-gray-400 tracking-widest mb-1">Total Equity</div>
-                        <div class="text-3xl font-bold font-mono tracking-tight">{formatCurrency(liveEquity !== undefined ? liveEquity : portfolio.equity)}</div>
-                        <div class="text-sm font-medium mt-1 flex items-center justify-end gap-1 font-mono">
+                        <div class="text-xl sm:text-3xl font-bold font-mono tracking-tight">{formatCurrency(liveEquity !== undefined ? liveEquity : portfolio.equity)}</div>
+                        <div class="text-sm font-medium mt-1 flex items-center sm:justify-end gap-1 font-mono">
                             <span class="text-gray-500">Cash: {formatCurrency(portfolio.cash)}</span>
                         </div>
                     </div>
@@ -416,10 +416,12 @@
             </header>
         );
 
+        const NAV_TABS = ['Dashboard', 'Beginner Stats', 'US Markets', 'Polish Stocks', 'Crypto', 'History', 'Settings'];
+
         const Sidebar = ({ activeTab, setActiveTab }) => (
-            <aside class="col-span-1 space-y-6">
+            <aside class="col-span-1 space-y-6 hidden sm:block">
                 <nav class="space-y-1">
-                    {['Dashboard', 'Beginner Stats', 'US Markets', 'Polish Stocks', 'Crypto', 'History', 'Settings'].map(tab => (
+                    {NAV_TABS.map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -433,6 +435,35 @@
                     ))}
                 </nav>
             </aside>
+        );
+
+        const MobileBottomNav = ({ activeTab, setActiveTab }) => (
+            <nav class="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-zinc-900 border-t border-gray-200 dark:border-zinc-700 flex overflow-x-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]">
+                {NAV_TABS.map(tab => {
+                    const icons = {
+                        'Dashboard': '📊',
+                        'Beginner Stats': '🏆',
+                        'US Markets': '🇺🇸',
+                        'Polish Stocks': '🇵🇱',
+                        'Crypto': '₿',
+                        'History': '📋',
+                        'Settings': '⚙️'
+                    };
+                    return (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            class={`flex-shrink-0 flex-1 min-w-[4.5rem] flex flex-col items-center justify-center py-2 gap-0.5 transition ${activeTab === tab
+                                    ? 'text-black dark:text-white border-t-2 border-black dark:border-white -mt-px'
+                                    : 'text-gray-400 dark:text-gray-500'
+                                }`}
+                        >
+                            <span class="text-base leading-none">{icons[tab]}</span>
+                            <span class="text-[9px] font-bold uppercase tracking-wide mt-0.5 leading-none">{tab.split(' ')[0]}</span>
+                        </button>
+                    );
+                })}
+            </nav>
         );
 
         const ChartComponent = ({ asset }) => {
@@ -589,42 +620,44 @@
         const MarketTable = ({ title, data, loading, onOpenTrade, onSelect }) => (
             <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm overflow-hidden shadow-sm">
                 <div class="p-4 border-b border-gray-200 dark:border-zinc-700 font-bold uppercase tracking-wider text-sm">{title}</div>
-                <table class="w-full text-left">
-                    <thead class="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-700">
-                        <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                            <th class="px-6 py-4">Instrument</th>
-                            <th class="px-6 py-4">Price</th>
-                            <th class="px-6 py-4">Change</th>
-                            <th class="px-6 py-4 text-right">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 dark:divide-zinc-700 font-mono text-sm">
-                        {loading ? (
-                            <tr><td colSpan="4" class="p-6 text-center text-gray-500">Loading market data...</td></tr>
-                        ) : data.map((item, idx) => (
-                            <tr key={idx} onClick={() => onSelect && onSelect(item)} class="hover:bg-gray-50 dark:hover:bg-zinc-700/50 transition cursor-pointer">
-                                <td class="px-6 py-4 font-bold text-sans">
-                                    <div class="font-bold">{item.symbol}</div>
-                                    <div class="text-xs text-gray-500 dark:text-gray-400 font-sans">{item.name}</div>
-                                </td>
-                                <td class="px-6 py-4">{formatCurrency(item.price)}</td>
-                                <td class="px-6 py-4">
-                                    <div class={item.change >= 0 ? 'text-emerald-500' : 'text-red-500'}>
-                                        {formatPct(item.change)}
-                                    </div>
-                                    {item.lastUpdate && (
-                                        <div class="text-[10px] text-gray-400 mt-1 whitespace-nowrap">
-                                            {new Date(item.lastUpdate).toLocaleString()}
-                                        </div>
-                                    )}
-                                </td>
-                                <td class="px-6 py-4 text-right">
-                                    <button onClick={(e) => { e.stopPropagation(); onOpenTrade(item); }} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>
-                                </td>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left min-w-[380px]">
+                        <thead class="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-700">
+                            <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                <th class="px-3 sm:px-6 py-2 sm:py-4">Instrument</th>
+                                <th class="px-3 sm:px-6 py-2 sm:py-4">Price</th>
+                                <th class="px-3 sm:px-6 py-2 sm:py-4">Change</th>
+                                <th class="px-3 sm:px-6 py-2 sm:py-4 text-right">Action</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 dark:divide-zinc-700 font-mono text-sm">
+                            {loading ? (
+                                <tr><td colSpan="4" class="p-6 text-center text-gray-500">Loading market data...</td></tr>
+                            ) : data.map((item, idx) => (
+                                <tr key={idx} onClick={() => onSelect && onSelect(item)} class="hover:bg-gray-50 dark:hover:bg-zinc-700/50 transition cursor-pointer">
+                                    <td class="px-3 sm:px-6 py-2 sm:py-4 font-bold text-sans">
+                                        <div class="font-bold">{item.symbol}</div>
+                                        <div class="text-xs text-gray-500 dark:text-gray-400 font-sans">{item.name}</div>
+                                    </td>
+                                    <td class="px-3 sm:px-6 py-2 sm:py-4">{formatCurrency(item.price)}</td>
+                                    <td class="px-3 sm:px-6 py-2 sm:py-4">
+                                        <div class={item.change >= 0 ? 'text-emerald-500' : 'text-red-500'}>
+                                            {formatPct(item.change)}
+                                        </div>
+                                        {item.lastUpdate && (
+                                            <div class="text-[10px] text-gray-400 mt-1 whitespace-nowrap">
+                                                {new Date(item.lastUpdate).toLocaleString()}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td class="px-3 sm:px-6 py-2 sm:py-4 text-right">
+                                        <button onClick={(e) => { e.stopPropagation(); onOpenTrade(item); }} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-3 sm:px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         );
 
@@ -662,48 +695,50 @@
                     {filteredPositions.length === 0 ? (
                         <div class="p-6 text-center text-gray-500 text-sm">No active positions</div>
                     ) : (
-                        <table class="w-full text-left">
-                            <thead class="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-700">
-                                <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                                    <th class="px-6 py-4">Instrument</th>
-                                    <th class="px-6 py-4">Qty</th>
-                                    <th class="px-6 py-4">Avg Buy</th>
-                                    <th class="px-6 py-4">Current</th>
-                                    <th class="px-6 py-4 text-right">Value</th>
-                                    <th class="px-6 py-4 text-right">P/L</th>
-                                    <th class="px-6 py-4 text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100 dark:divide-zinc-700 font-mono text-sm">
-                                {filteredPositions.map((pos, idx) => {
-                                    const asset = allAssets.find(a => a.symbol === pos.symbol);
-                                    const currentPrice = asset ? asset.price : (pos.currentPrice || pos.avgPrice);
-                                    const pl = (currentPrice - pos.avgPrice) * pos.qty;
-                                    const plPct = pos.avgPrice > 0 ? ((currentPrice - pos.avgPrice) / pos.avgPrice) * 100 : 0;
-                                    return (
-                                        <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-zinc-700/50 transition">
-                                            <td class="px-6 py-4 font-bold text-sans">{pos.symbol}</td>
-                                            <td class="px-6 py-4">{pos.qty}</td>
-                                            <td class="px-6 py-4">{formatCurrency(pos.avgPrice)}</td>
-                                            <td class="px-6 py-4">{formatCurrency(currentPrice)}</td>
-                                            <td class="px-6 py-4 text-right font-bold">{formatCurrency(pos.qty * currentPrice)}</td>
-                                            <td class={`px-6 py-4 text-right font-bold ${pl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                {pl >= 0 ? '+' : ''}{formatCurrency(pl)}<br />
-                                                <span class="text-xs opacity-80">{pl >= 0 ? '+' : ''}{plPct.toFixed(2)}%</span>
-                                                {asset && asset.lastUpdate && (
-                                                    <div class="text-[10px] text-gray-400 mt-1 font-normal whitespace-nowrap">
-                                                        {new Date(asset.lastUpdate).toLocaleString()}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td class="px-6 py-4 text-right">
-                                                <button onClick={() => onOpenTrade({ symbol: pos.symbol, price: currentPrice })} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>
-                                            </td>
-                                        </tr>
-                                    )
-                                })}
-                            </tbody>
-                        </table>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left min-w-[580px]">
+                                <thead class="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-700">
+                                    <tr class="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                        <th class="px-2 sm:px-6 py-2 sm:py-4">Instrument</th>
+                                        <th class="px-2 sm:px-6 py-2 sm:py-4">Qty</th>
+                                        <th class="px-2 sm:px-6 py-2 sm:py-4">Avg Buy</th>
+                                        <th class="px-2 sm:px-6 py-2 sm:py-4">Current</th>
+                                        <th class="px-2 sm:px-6 py-2 sm:py-4 text-right">Value</th>
+                                        <th class="px-2 sm:px-6 py-2 sm:py-4 text-right">P/L</th>
+                                        <th class="px-2 sm:px-6 py-2 sm:py-4 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100 dark:divide-zinc-700 font-mono text-sm">
+                                    {filteredPositions.map((pos, idx) => {
+                                        const asset = allAssets.find(a => a.symbol === pos.symbol);
+                                        const currentPrice = asset ? asset.price : (pos.currentPrice || pos.avgPrice);
+                                        const pl = (currentPrice - pos.avgPrice) * pos.qty;
+                                        const plPct = pos.avgPrice > 0 ? ((currentPrice - pos.avgPrice) / pos.avgPrice) * 100 : 0;
+                                        return (
+                                            <tr key={idx} class="hover:bg-gray-50 dark:hover:bg-zinc-700/50 transition">
+                                                <td class="px-2 sm:px-6 py-2 sm:py-4 font-bold text-sans">{pos.symbol}</td>
+                                                <td class="px-2 sm:px-6 py-2 sm:py-4">{pos.qty}</td>
+                                                <td class="px-2 sm:px-6 py-2 sm:py-4">{formatCurrency(pos.avgPrice)}</td>
+                                                <td class="px-2 sm:px-6 py-2 sm:py-4">{formatCurrency(currentPrice)}</td>
+                                                <td class="px-2 sm:px-6 py-2 sm:py-4 text-right font-bold">{formatCurrency(pos.qty * currentPrice)}</td>
+                                                <td class={`px-2 sm:px-6 py-2 sm:py-4 text-right font-bold ${pl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                    {pl >= 0 ? '+' : ''}{formatCurrency(pl)}<br />
+                                                    <span class="text-xs opacity-80">{pl >= 0 ? '+' : ''}{plPct.toFixed(2)}%</span>
+                                                    {asset && asset.lastUpdate && (
+                                                        <div class="text-[10px] text-gray-400 mt-1 font-normal whitespace-nowrap">
+                                                            {new Date(asset.lastUpdate).toLocaleString()}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td class="px-2 sm:px-6 py-2 sm:py-4 text-right">
+                                                    <button onClick={() => onOpenTrade({ symbol: pos.symbol, price: currentPrice })} class="bg-black dark:bg-white text-white dark:text-black hover:opacity-80 px-2 sm:px-4 py-1 rounded-sm text-xs font-bold uppercase">Trade</button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
             );
@@ -1199,14 +1234,14 @@
             return (
                 <section class="col-span-3 space-y-8">
                     {/* Dynamic Chart Area */}
-                    <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 p-8 rounded-sm h-96 flex flex-col justify-between shadow-sm">
+                    <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 p-4 sm:p-8 rounded-sm h-72 sm:h-96 flex flex-col justify-between shadow-sm">
                         <div class="flex justify-between items-start mb-4">
                             <div>
-                                <h2 class="text-2xl font-bold">{currentAsset.symbol}</h2>
-                                <span class="font-mono text-gray-500">{currentAsset.name}</span>
+                                <h2 class="text-lg sm:text-2xl font-bold">{currentAsset.symbol}</h2>
+                                <span class="font-mono text-gray-500 text-sm">{currentAsset.name}</span>
                             </div>
                             <div class="text-right">
-                                <div class="text-3xl font-mono font-bold">{formatCurrency(currentAsset.price)}</div>
+                                <div class="text-xl sm:text-3xl font-mono font-bold">{formatCurrency(currentAsset.price)}</div>
                                 <div class={`text-sm font-bold ${currentAsset.change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatPct(currentAsset.change)}</div>
                             </div>
                         </div>
@@ -1219,7 +1254,7 @@
                     </div>
 
                     <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm overflow-hidden shadow-sm">
-                        <h2 class="text-2xl font-bold mb-2 px-4 pt-4">{activeTab}</h2>
+                        <h2 class="text-xl sm:text-2xl font-bold mb-2 px-4 pt-4">{activeTab}</h2>
                         <MarketTable title={`Live ${activeTab} Data`} data={displayData} loading={loading} onOpenTrade={onOpenTrade} onSelect={onSelectAsset} />
                     </div>
                 </section>
@@ -1551,8 +1586,8 @@
                     )}
                     <AddCashModal isOpen={isAddCashOpen} onClose={() => setIsAddCashOpen(false)} onAddCash={handleAddCash} />
 
-                    <div class="container mx-auto p-4 max-w-7xl">
-                        <div class="fixed top-4 right-4 z-40 flex items-center gap-2">
+                    <div class="container mx-auto p-4 max-w-7xl pb-20 sm:pb-4">
+                        <div class="fixed bottom-4 right-4 sm:bottom-auto sm:top-4 sm:right-4 z-40 flex items-center gap-2">
                             {autoTradeEnabled && (
                                 <div class="bg-black text-white px-3 py-2 rounded-sm font-mono text-sm border border-white font-bold">
                                     Next: {timeLeft}s
@@ -1565,8 +1600,6 @@
                                 {autoTradeEnabled ? 'STOP ROBOT' : 'START ROBOT'}
                             </button>
                         </div>
-
-
 
                         <Header darkMode={darkMode} toggleTheme={() => setDarkMode(!darkMode)} portfolio={portfolio} liveEquity={liveEquity} appVersion={appVersion} />
 
@@ -1585,9 +1618,9 @@
                                 onOpenAddCash={() => setIsAddCashOpen(true)}
                                 config={config}
                                 updateConfig={updateConfig}
-
                             />
                         </div>
+                        <MobileBottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
                     </div>
                 </div>
             );
