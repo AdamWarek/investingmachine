@@ -369,7 +369,7 @@ const calculateScore = (asset) => {
 };
 
 // --- Bot Execution Logic ---
-const executeTrade = async (asset, mode, qty, reason) => {
+const executeTrade = async (asset, mode, qty, reason, robotId) => {
     try {
         const portfolio = await getPortfolio();
         const price = asset.price;
@@ -379,28 +379,29 @@ const executeTrade = async (asset, mode, qty, reason) => {
             if (portfolio.cash < totalCost) return;
 
             portfolio.cash -= totalCost;
-            const pos = portfolio.positions.find(p => p.symbol === asset.symbol);
+            // Find existing position for this robot + symbol combo
+            const pos = portfolio.positions.find(p => p.symbol === asset.symbol && p.robotId === robotId);
             if (pos) {
                 pos.avgPrice = ((pos.avgPrice * pos.qty) + totalCost) / (pos.qty + qty);
                 pos.qty += qty;
             } else {
-                portfolio.positions.push({ symbol: asset.symbol, qty, avgPrice: price });
+                portfolio.positions.push({ symbol: asset.symbol, qty, avgPrice: price, robotId });
             }
-            portfolio.history.push({ date: new Date(), type: 'BUY', symbol: asset.symbol, qty, price, reason });
-            botLogger(`ROBOT: Bought ${asset.symbol} - ${reason}`);
+            portfolio.history.push({ date: new Date(), type: 'BUY', symbol: asset.symbol, qty, price, reason, robotId });
+            botLogger(`[${robotId}] Bought ${asset.symbol} - ${reason}`);
 
         } else {
-            const pos = portfolio.positions.find(p => p.symbol === asset.symbol);
+            const pos = portfolio.positions.find(p => p.symbol === asset.symbol && p.robotId === robotId);
             if (!pos || pos.qty < qty) return;
 
             portfolio.cash += totalCost;
             if (pos.qty === qty) {
-                portfolio.positions = portfolio.positions.filter(p => p.symbol !== asset.symbol);
+                portfolio.positions = portfolio.positions.filter(p => !(p.symbol === asset.symbol && p.robotId === robotId));
             } else {
                 pos.qty -= qty;
             }
-            portfolio.history.push({ date: new Date(), type: 'SELL', symbol: asset.symbol, qty, price, reason });
-            botLogger(`ROBOT: Sold ${asset.symbol} - ${reason}`);
+            portfolio.history.push({ date: new Date(), type: 'SELL', symbol: asset.symbol, qty, price, reason, robotId });
+            botLogger(`[${robotId}] Sold ${asset.symbol} - ${reason}`);
         }
 
         // Recalc Equity
@@ -420,18 +421,69 @@ const executeTrade = async (asset, mode, qty, reason) => {
 };
 
 let botIntervalId = null;
-let botConfig = {
-    enabled: false,
-    interval: 60, // seconds
-    posSizePct: 10,
-    slPct: 3,
-    tpPct: 5,
-    buyScore: 60
-};
+let botsEnabled = false;
+
+// --- Robot Definitions ---
+const robots = [
+    {
+        id: 'score',
+        name: 'Score Bot',
+        strategy: 'score',
+        interval: 60,
+        posSizePct: 10,
+        slPct: 3,
+        tpPct: 5,
+        buyScore: 60,
+        maxPositions: 5
+    },
+    {
+        id: 'strategy_a',
+        name: 'Strategy A (Trend)',
+        strategy: 'strategy_a',
+        interval: 60,
+        posSizePct: 10,
+        slPct: 3,
+        tpPct: 5,
+        buyScore: 60,
+        maxPositions: 5
+    },
+    {
+        id: 'strategy_b',
+        name: 'Strategy B (Reversion)',
+        strategy: 'strategy_b',
+        interval: 60,
+        posSizePct: 10,
+        slPct: 3,
+        tpPct: 5,
+        buyScore: 55,
+        maxPositions: 5
+    },
+    {
+        id: 'strategy_c',
+        name: 'Strategy C (Momentum)',
+        strategy: 'strategy_c',
+        interval: 60,
+        posSizePct: 10,
+        slPct: 3,
+        tpPct: 5,
+        buyScore: 55,
+        maxPositions: 5
+    }
+];
+
+// Legacy-compatible config getter (returns merged view)
+const getBotConfig = () => ({
+    enabled: botsEnabled,
+    interval: robots[0].interval,
+    posSizePct: robots[0].posSizePct,
+    slPct: robots[0].slPct,
+    tpPct: robots[0].tpPct,
+    buyScore: robots[0].buyScore
+});
 
 // --- Bot Live Logging ---
 const botLogs = [];
-const MAX_BOT_LOGS = 100;
+const MAX_BOT_LOGS = 200;
 const botLogger = (message) => {
     botLogs.push({ time: Date.now(), msg: message });
     if (botLogs.length > MAX_BOT_LOGS) {
@@ -440,74 +492,304 @@ const botLogger = (message) => {
     console.log(message);
 };
 
-const runAutoTrading = async () => {
-    if (!botConfig.enabled) return;
-    botLogger("ROBOT: Running trading cycle...");
+// --- Strategy Evaluators ---
+// Each returns { score, signal, reasons } where signal is 'BUY' | 'SELL' | 'NEUTRAL'
+
+const evaluateScoreStrategy = (asset) => {
+    const result = calculateScore(asset);
+    return { score: result.score, signal: result.score >= 60 ? 'BUY' : 'NEUTRAL', reasons: result.reasons };
+};
+
+// Strategy A: VWAP + EMA Trend + RSI Confirmation (placeholder — full impl in Step 2)
+const evaluateStrategyA = (asset) => {
+    const prices = asset.prices;
+    if (!prices || prices.length < 30) return { score: 0, signal: 'NEUTRAL', reasons: ['Insufficient data'] };
+
+    let score = 0;
+    const reasons = [];
+
+    // EMA alignment: EMA9 > EMA21 (bullish)
+    const ema9 = calcEMA(prices, 9);
+    const ema21 = calcEMA(prices, 21);
+    const currentPrice = prices[prices.length - 1];
+
+    if (ema9 && ema21 && ema9 > ema21) {
+        score += 25;
+        reasons.push('EMA9 > EMA21 (Bullish Trend)');
+    }
+
+    // RSI in range 45-68 (buy zone)
+    const rsi = calcRSI(prices, 14);
+    if (rsi >= 45 && rsi <= 68) {
+        score += 20;
+        reasons.push(`RSI in buy zone (${rsi.toFixed(1)})`);
+    } else if (rsi > 75) {
+        score -= 15;
+        reasons.push(`RSI Overbought (${rsi.toFixed(1)})`);
+    }
+
+    // Price > EMA9 (above trend support)
+    if (ema9 && currentPrice > ema9) {
+        score += 15;
+        reasons.push('Price > EMA9');
+    }
+
+    // Volume confirmation
+    if (asset.volumes && asset.volumes.length > 20) {
+        const currentVol = asset.volumes[asset.volumes.length - 1];
+        const avgVol = asset.volumes.slice(-21, -1).reduce((a, b) => a + b, 0) / 20;
+        if (currentVol > avgVol * 1.2) {
+            score += 10;
+            reasons.push('Volume confirmed (>1.2x avg)');
+        }
+    }
+
+    // MACD bullish
+    const macd = calcMACD(prices);
+    if (macd.histogram > 0) {
+        score += 10;
+        reasons.push('MACD Bullish');
+    }
+
+    // Sell signal check
+    let signal = 'NEUTRAL';
+    if (score >= 60) signal = 'BUY';
+    if (ema9 && ema21 && ema9 < ema21 && rsi > 55) {
+        signal = 'SELL';
+        reasons.push('EMA9 < EMA21 (Bearish Cross)');
+    }
+
+    return { score: Math.max(0, Math.min(100, score)), signal, reasons };
+};
+
+// Strategy B: Bollinger Mean Reversion + RSI Exhaustion (placeholder — full impl in Step 2)
+const evaluateStrategyB = (asset) => {
+    const prices = asset.prices;
+    if (!prices || prices.length < 30) return { score: 0, signal: 'NEUTRAL', reasons: ['Insufficient data'] };
+
+    let score = 0;
+    const reasons = [];
+    const currentPrice = prices[prices.length - 1];
+
+    const bb = calcBollingerBands(prices, 20, 2);
+    if (!bb) return { score: 0, signal: 'NEUTRAL', reasons: ['Cannot compute BB'] };
+
+    const rsi = calcRSI(prices, 14);
+
+    // Buy: price at or below lower BB + RSI oversold
+    if (currentPrice <= bb.lower * 1.02) {
+        score += 30;
+        reasons.push('Near/Below Lower BB (oversold)');
+    }
+    if (rsi < 30) {
+        score += 25;
+        reasons.push(`RSI deeply oversold (${rsi.toFixed(1)})`);
+    } else if (rsi < 40) {
+        score += 10;
+        reasons.push(`RSI low (${rsi.toFixed(1)})`);
+    }
+
+    // Anti-squeeze: BB bandwidth must be > 0.005
+    const bbWidth = (bb.upper - bb.lower) / bb.middle;
+    if (bbWidth > 0.005) {
+        score += 10;
+        reasons.push('BB not squeezing');
+    } else {
+        score -= 25;
+        reasons.push('BB squeeze — disqualified');
+    }
+
+    // Sell: price at or above upper BB + RSI overbought
+    let signal = 'NEUTRAL';
+    if (currentPrice >= bb.upper * 0.98 && rsi > 70) {
+        signal = 'SELL';
+        score = 60;
+        reasons.push('Near Upper BB + RSI Overbought — SELL');
+    } else if (score >= 55) {
+        signal = 'BUY';
+    }
+
+    return { score: Math.max(0, Math.min(100, score)), signal, reasons };
+};
+
+// Strategy C: MACD Momentum + Volume Breakout (placeholder — full impl in Step 2)
+const evaluateStrategyC = (asset) => {
+    const prices = asset.prices;
+    if (!prices || prices.length < 30) return { score: 0, signal: 'NEUTRAL', reasons: ['Insufficient data'] };
+
+    let score = 0;
+    const reasons = [];
+
+    const macd = calcMACD(prices);
+    const rsi = calcRSI(prices, 14);
+
+    // MACD histogram positive and expanding
+    if (macd.histogram > 0) {
+        score += 20;
+        reasons.push('MACD Histogram positive');
+        if (macd.prevMacd !== undefined && macd.macd > macd.prevMacd * 1.3) {
+            score += 15;
+            reasons.push('MACD expanding momentum');
+        }
+    }
+
+    // MACD line > signal
+    if (macd.macd > macd.signal) {
+        score += 10;
+        reasons.push('MACD Line > Signal');
+    }
+
+    // Volume surge
+    if (asset.volumes && asset.volumes.length > 20) {
+        const currentVol = asset.volumes[asset.volumes.length - 1];
+        const avgVol = asset.volumes.slice(-21, -1).reduce((a, b) => a + b, 0) / 20;
+        if (currentVol > avgVol * 1.5) {
+            score += 20;
+            reasons.push(`Volume surge (${(currentVol / avgVol).toFixed(1)}x avg)`);
+        }
+    }
+
+    // RSI not exhausted
+    if (rsi < 70) {
+        score += 5;
+        reasons.push(`RSI not overbought (${rsi.toFixed(1)})`);
+    } else {
+        score -= 15;
+        reasons.push(`RSI overbought warning (${rsi.toFixed(1)})`);
+    }
+
+    // Sell signal
+    let signal = 'NEUTRAL';
+    if (macd.histogram < 0 && macd.macd < macd.signal) {
+        signal = 'SELL';
+        score = 60;
+        reasons.push('MACD bearish cross — SELL');
+    } else if (score >= 55) {
+        signal = 'BUY';
+    }
+
+    return { score: Math.max(0, Math.min(100, score)), signal, reasons };
+};
+
+// Strategy dispatcher
+const evaluateStrategy = (robot, asset) => {
+    switch (robot.strategy) {
+        case 'score': return evaluateScoreStrategy(asset);
+        case 'strategy_a': return evaluateStrategyA(asset);
+        case 'strategy_b': return evaluateStrategyB(asset);
+        case 'strategy_c': return evaluateStrategyC(asset);
+        default: return { score: 0, signal: 'NEUTRAL', reasons: ['Unknown strategy'] };
+    }
+};
+
+// --- Per-Robot Trading Cycle ---
+const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+const runRobotCycle = async (robot) => {
+    botLogger(`[${robot.id}] Running cycle...`);
 
     const portfolio = await getPortfolio();
-    const allAssets = [...marketData.us, ...marketData.pl, ...marketData.crypto];
-    botLogger(`ROBOT: Checking ${allAssets.length} assets against ${portfolio.positions.length} open positions.`);
+    const allAssetsRaw = [...marketData.us, ...marketData.pl, ...marketData.crypto];
 
-    // 1. AUTO-SELL CHECKS
-    for (const pos of portfolio.positions) {
-        const asset = allAssets.find(a => a.symbol === pos.symbol);
+    // Filter out stale and invalid assets
+    const now = Date.now();
+    const allAssets = allAssetsRaw.filter(a => {
+        // Price must be a valid positive number
+        if (!a.price || a.price <= 0 || !isFinite(a.price)) return false;
+        // Must have a recent lastUpdate (within 2 hours)
+        if (a.lastUpdate) {
+            const age = now - new Date(a.lastUpdate).getTime();
+            if (age > STALE_THRESHOLD_MS) return false;
+        }
+        return true;
+    });
+
+    botLogger(`[${robot.id}] ${allAssets.length}/${allAssetsRaw.length} assets are fresh & valid.`);
+
+    const robotPositions = portfolio.positions.filter(p => p.robotId === robot.id);
+    botLogger(`[${robot.id}] Has ${robotPositions.length}/${robot.maxPositions} positions.`);
+
+    // 1. AUTO-SELL CHECKS (use raw assets for sell checks — we still need to sell stale positions)
+    for (const pos of robotPositions) {
+        const asset = allAssetsRaw.find(a => a.symbol === pos.symbol);
         if (!asset) continue;
 
         const pnlPct = (asset.price - pos.avgPrice) / pos.avgPrice;
         let sellReason = null;
 
-        if (pnlPct <= -(botConfig.slPct / 100)) sellReason = `Stop Loss Hit (${(pnlPct * 100).toFixed(2)}%)`;
-        else if (pnlPct >= (botConfig.tpPct / 100)) sellReason = `Take Profit Hit (+${(pnlPct * 100).toFixed(2)}%)`;
+        if (pnlPct <= -(robot.slPct / 100)) sellReason = `Stop Loss Hit (${(pnlPct * 100).toFixed(2)}%)`;
+        else if (pnlPct >= (robot.tpPct / 100)) sellReason = `Take Profit Hit (+${(pnlPct * 100).toFixed(2)}%)`;
 
-        const rsi = calcRSI(asset.prices);
-        if (!sellReason && rsi > 75) sellReason = `RSI Overbought (${rsi.toFixed(0)})`;
-
-        const macd = calcMACD(asset.prices);
-        if (!sellReason && macd.histogram < 0 && macd.prevMacd > macd.prevSignal) sellReason = "MACD Death Cross";
+        // Strategy-specific sell check
+        const evalResult = evaluateStrategy(robot, asset);
+        if (!sellReason && evalResult.signal === 'SELL') {
+            sellReason = `Strategy SELL (${evalResult.reasons.join(', ')})`;
+        }
 
         if (sellReason) {
-            await executeTrade(asset, 'SELL', pos.qty, sellReason);
+            await executeTrade(asset, 'SELL', pos.qty, sellReason, robot.id);
         }
     }
 
-    // Refresh portfolio after possible sells to get accurate cash
+    // Refresh portfolio after possible sells
     const updatedPortfolio = await getPortfolio();
+    const updatedRobotPositions = updatedPortfolio.positions.filter(p => p.robotId === robot.id);
 
-    // 2. AUTO-BUY CHECKS
-    const scored = allAssets.map(a => ({ asset: a, ...calculateScore(a) }));
-    const candidates = scored.filter(s => s.score >= botConfig.buyScore);
+    // 2. AUTO-BUY CHECKS (only if below maxPositions)
+    if (updatedRobotPositions.length >= robot.maxPositions) {
+        botLogger(`[${robot.id}] At max positions (${robot.maxPositions}). Skipping buy.`);
+        return;
+    }
+
+    // Only evaluate FRESH assets for buying
+    const scored = allAssets.map(a => ({ asset: a, ...evaluateStrategy(robot, a) }));
+    const candidates = scored.filter(s => s.signal === 'BUY' && s.score >= robot.buyScore);
     candidates.sort((a, b) => b.score - a.score);
-    botLogger(`ROBOT: Found ${candidates.length} buy candidates with score >= ${botConfig.buyScore}.`);
+    botLogger(`[${robot.id}] Found ${candidates.length} buy candidates (score >= ${robot.buyScore}).`);
 
     let availableCash = updatedPortfolio.cash;
-    botLogger(`ROBOT: Available cash: $${availableCash.toFixed(2)}`);
 
     if (candidates.length > 0 && availableCash > 500) {
         const best = candidates[0];
-        botLogger(`ROBOT: Top candidate is ${best.asset.symbol} with score ${best.score}. Currently held: ${!!updatedPortfolio.positions.find(p => p.symbol === best.asset.symbol)}`);
+        botLogger(`[${robot.id}] Top candidate: ${best.asset.symbol} (score: ${best.score})`);
 
-        const sizeAmt = updatedPortfolio.equity * (botConfig.posSizePct / 100);
+        const sizeAmt = updatedPortfolio.equity * (robot.posSizePct / 100);
         const qty = Math.floor(sizeAmt / best.asset.price);
 
-        if (qty > 0 && availableCash > (qty * best.asset.price)) {
-            await executeTrade(best.asset, 'BUY', qty, `Score: ${best.score} (${best.reasons.join(', ')})`);
+        if (qty > 0 && isFinite(qty) && availableCash > (qty * best.asset.price)) {
+            await executeTrade(best.asset, 'BUY', qty, `Score: ${best.score} (${best.reasons.join(', ')})`, robot.id);
         } else {
-            botLogger(`ROBOT: Wanted to buy ${best.asset.symbol} but couldn't afford calculated qty ${qty}.`);
+            botLogger(`[${robot.id}] Can't afford ${best.asset.symbol} (qty: ${qty}).`);
         }
     }
 };
 
+const runAutoTrading = async () => {
+    if (!botsEnabled) return;
+    botLogger('--- ALL ROBOTS: Starting trading cycle ---');
+    for (const robot of robots) {
+        await runRobotCycle(robot);
+    }
+    botLogger('--- ALL ROBOTS: Cycle complete ---');
+};
+
 const updateBotTimer = () => {
     if (botIntervalId) clearInterval(botIntervalId);
-    if (botConfig.enabled) {
-        botIntervalId = setInterval(runAutoTrading, botConfig.interval * 1000);
+    if (botsEnabled) {
+        // Use the interval from the first robot (they share a timer)
+        const interval = robots[0].interval;
+        botIntervalId = setInterval(runAutoTrading, interval * 1000);
         runAutoTrading(); // Run immediately on toggle
     }
 };
 
 // API routes for Bot Control
 app.get('/api/bot/config', (req, res) => {
-    res.json(botConfig);
+    res.json(getBotConfig());
+});
+
+app.get('/api/bot/robots', (req, res) => {
+    res.json({ enabled: botsEnabled, robots });
 });
 
 app.get('/api/bot/logs', (req, res) => {
@@ -515,17 +797,39 @@ app.get('/api/bot/logs', (req, res) => {
 });
 
 app.post('/api/bot/toggle', (req, res) => {
-    botConfig.enabled = !botConfig.enabled;
-    console.log(`🤖 Bot Toggled. Enabled: ${botConfig.enabled}`);
+    botsEnabled = !botsEnabled;
+    console.log(`🤖 Bots Toggled. Enabled: ${botsEnabled}`);
     updateBotTimer();
-    res.json(botConfig);
+    res.json(getBotConfig());
 });
 
 app.post('/api/bot/config', (req, res) => {
-    botConfig = { ...botConfig, ...req.body };
-    console.log(`⚙️ Bot Config Updated:`, botConfig);
+    const updates = req.body;
+    // Apply config to all robots when using legacy endpoint
+    robots.forEach(r => {
+        if (updates.interval !== undefined) r.interval = updates.interval;
+        if (updates.slPct !== undefined) r.slPct = updates.slPct;
+        if (updates.tpPct !== undefined) r.tpPct = updates.tpPct;
+        if (updates.buyScore !== undefined) r.buyScore = updates.buyScore;
+        if (updates.posSizePct !== undefined) r.posSizePct = updates.posSizePct;
+    });
+    console.log(`⚙️ Bot Config Updated (all robots)`);
     updateBotTimer();
-    res.json(botConfig);
+    res.json(getBotConfig());
+});
+
+app.post('/api/bot/robot/:id/config', (req, res) => {
+    const robot = robots.find(r => r.id === req.params.id);
+    if (!robot) return res.status(404).json({ error: 'Robot not found' });
+    const updates = req.body;
+    if (updates.interval !== undefined) robot.interval = updates.interval;
+    if (updates.slPct !== undefined) robot.slPct = updates.slPct;
+    if (updates.tpPct !== undefined) robot.tpPct = updates.tpPct;
+    if (updates.buyScore !== undefined) robot.buyScore = updates.buyScore;
+    if (updates.posSizePct !== undefined) robot.posSizePct = updates.posSizePct;
+    if (updates.maxPositions !== undefined) robot.maxPositions = updates.maxPositions;
+    console.log(`⚙️ Robot ${robot.id} config updated`);
+    res.json(robot);
 });
 
 // Initial Fetch for testing and then poll every 15 minutes to save API hits

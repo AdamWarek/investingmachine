@@ -628,13 +628,39 @@
             </div>
         );
 
-        const PositionsTable = ({ positions, marketData, onOpenTrade }) => {
+        // Robot Name Mapping
+        const ROBOT_NAMES = {
+            'score': 'Score Bot',
+            'strategy_a': 'Strategy A (Trend)',
+            'strategy_b': 'Strategy B (Reversion)',
+            'strategy_c': 'Strategy C (Momentum)'
+        };
+        const ROBOT_COLORS = {
+            'score': 'border-blue-500',
+            'strategy_a': 'border-emerald-500',
+            'strategy_b': 'border-purple-500',
+            'strategy_c': 'border-orange-500'
+        };
+        const ROBOT_BG = {
+            'score': 'bg-blue-500',
+            'strategy_a': 'bg-emerald-500',
+            'strategy_b': 'bg-purple-500',
+            'strategy_c': 'bg-orange-500'
+        };
+
+        const PositionsTable = ({ positions, marketData, onOpenTrade, robotId, robotName }) => {
             const allAssets = marketData ? [...(marketData.us || []), ...(marketData.pl || []), ...(marketData.crypto || [])] : [];
+            const filteredPositions = robotId ? positions.filter(p => p.robotId === robotId) : positions;
+            const borderColor = robotId ? (ROBOT_COLORS[robotId] || 'border-gray-200') : 'border-gray-200';
             return (
-                <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm overflow-hidden shadow-sm">
-                    <div class="p-4 border-b border-gray-200 dark:border-zinc-700 font-bold uppercase tracking-wider text-sm">Active Positions</div>
-                    {positions.length === 0 ? (
-                        <div class="p-8 text-center text-gray-500">No active positions</div>
+                <div class={`bg-white dark:bg-zinc-800 border-2 ${borderColor} dark:border-zinc-700 rounded-sm overflow-hidden shadow-sm`}>
+                    <div class="p-4 border-b border-gray-200 dark:border-zinc-700 font-bold uppercase tracking-wider text-sm flex items-center gap-2">
+                        {robotId && <span class={`w-3 h-3 rounded-full ${ROBOT_BG[robotId] || 'bg-gray-400'}`}></span>}
+                        {robotName || 'Active Positions'}
+                        <span class="text-xs font-mono text-gray-400 ml-auto">{filteredPositions.length} position{filteredPositions.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    {filteredPositions.length === 0 ? (
+                        <div class="p-6 text-center text-gray-500 text-sm">No active positions</div>
                     ) : (
                         <table class="w-full text-left">
                             <thead class="bg-gray-50 dark:bg-zinc-900 border-b border-gray-200 dark:border-zinc-700">
@@ -649,7 +675,7 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 dark:divide-zinc-700 font-mono text-sm">
-                                {positions.map((pos, idx) => {
+                                {filteredPositions.map((pos, idx) => {
                                     const asset = allAssets.find(a => a.symbol === pos.symbol);
                                     const currentPrice = asset ? asset.price : (pos.currentPrice || pos.avgPrice);
                                     const pl = (currentPrice - pos.avgPrice) * pos.qty;
@@ -724,6 +750,17 @@
         const Settings = ({ marketData, config, updateConfig }) => {
             const getStatusColor = (data) => data && data.length > 0 ? 'bg-emerald-500' : 'bg-red-500';
             const [botLogs, setBotLogs] = useState([]);
+            const [robotConfigs, setRobotConfigs] = useState([]);
+
+            // Fetch robot configs on mount
+            useEffect(() => {
+                fetch('/api/bot/robots')
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data && data.robots) setRobotConfigs(data.robots);
+                    })
+                    .catch(err => console.error("Failed to load robots:", err));
+            }, []);
 
             // Poll bot logs only when Settings tab is active
             useEffect(() => {
@@ -743,56 +780,102 @@
                 return () => clearInterval(logIntervalId);
             }, []);
 
+            const updateRobotConfig = (robotId, field, value) => {
+                // Optimistic update
+                setRobotConfigs(prev => prev.map(r =>
+                    r.id === robotId ? { ...r, [field]: value } : r
+                ));
+                // Send to server
+                fetch(`/api/bot/robot/${robotId}/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [field]: value })
+                }).catch(err => console.error(`Failed to update robot ${robotId}:`, err));
+            };
+
             return (
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm p-6 max-w-lg">
-                        <h2 class="text-xl font-bold mb-4 uppercase">Settings</h2>
-                        <div class="space-y-4">
+                    <div class="space-y-4 max-w-lg">
+                        <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-sm p-6">
+                            <h2 class="text-xl font-bold mb-4 uppercase">Settings</h2>
+                            <div class="space-y-4">
 
-                            <div class="mb-4">
-                                <h3 class="text-sm font-bold mb-2">Robot Config</h3>
-                                <div class="flex flex-wrap gap-4 items-center text-xs font-mono">
-                                    <label class="flex items-center gap-1">
-                                        Interval:
-                                        <select value={config.interval || 60} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1">
-                                            <option value="10">10s</option>
-                                            <option value="30">30s</option>
-                                            <option value="60">60s</option>
-                                        </select>
+                                {/* Global Interval */}
+                                <div class="mb-4">
+                                    <h3 class="text-sm font-bold mb-2">Global Config</h3>
+                                    <div class="flex items-center gap-2 text-xs font-mono">
+                                        <label class="flex items-center gap-1">
+                                            Cycle Interval:
+                                            <select value={config.interval || 60} onChange={e => updateConfig({ ...config, interval: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1 rounded-sm">
+                                                <option value="10">10s</option>
+                                                <option value="30">30s</option>
+                                                <option value="60">60s</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="pt-4 border-t border-gray-200 dark:border-zinc-700">
+                                    <h3 class="text-sm font-bold mb-2">API Status</h3>
+                                    <ul class="text-xs space-y-2 text-gray-500 font-mono">
+                                        <li class="flex items-center gap-2">
+                                            <span class={`w-3 h-3 rounded-full ${marketData?.crypto?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                            Crypto: CoinGecko (Public API)
+                                        </li>
+                                        <li class="flex items-center gap-2">
+                                            <span class={`w-3 h-3 rounded-full ${marketData?.us?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                            US Stocks: Yahoo Finance via Proxy
+                                        </li>
+                                        <li class="flex items-center gap-2">
+                                            <span class={`w-3 h-3 rounded-full ${marketData?.pl?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                            PL Stocks: Yahoo Finance via Proxy
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Per-Robot Config Cards */}
+                        <h3 class="text-sm font-bold uppercase tracking-wider text-gray-400 pt-2">Robot Configurations</h3>
+                        {robotConfigs.map(robot => (
+                            <div key={robot.id} class={`bg-white dark:bg-zinc-800 border-l-4 ${ROBOT_COLORS[robot.id] || 'border-gray-300'} border border-gray-200 dark:border-zinc-700 rounded-sm p-4`}>
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class={`w-3 h-3 rounded-full ${ROBOT_BG[robot.id] || 'bg-gray-400'}`}></span>
+                                    <span class="text-sm font-bold">{robot.name}</span>
+                                    <span class="text-[10px] font-mono text-gray-400 ml-auto">{robot.strategy}</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3 text-xs font-mono">
+                                    <label class="flex flex-col gap-1" title="Stop Loss Percentage">
+                                        <span class="text-gray-400 text-[10px] uppercase font-bold">SL %</span>
+                                        <input type="number" min="0.1" step="0.1"
+                                            value={robot.slPct}
+                                            onChange={e => updateRobotConfig(robot.id, 'slPct', Number(e.target.value))}
+                                            class="bg-gray-100 dark:bg-zinc-700 p-1.5 text-right border border-gray-300 dark:border-zinc-600 rounded-sm w-full" />
                                     </label>
-                                    <label class="flex items-center gap-1" title="Stop Loss Percentage">
-                                        SL %:
-                                        <input type="number" min="0.1" step="0.1" value={config.slPct || 3} onChange={e => updateConfig({ ...config, slPct: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1 w-16 text-right border border-gray-300 dark:border-zinc-600 rounded-sm" />
+                                    <label class="flex flex-col gap-1" title="Take Profit Percentage">
+                                        <span class="text-gray-400 text-[10px] uppercase font-bold">TP %</span>
+                                        <input type="number" min="0.1" step="0.1"
+                                            value={robot.tpPct}
+                                            onChange={e => updateRobotConfig(robot.id, 'tpPct', Number(e.target.value))}
+                                            class="bg-gray-100 dark:bg-zinc-700 p-1.5 text-right border border-gray-300 dark:border-zinc-600 rounded-sm w-full" />
                                     </label>
-                                    <label class="flex items-center gap-1" title="Take Profit Percentage">
-                                        TP %:
-                                        <input type="number" min="0.1" step="0.1" value={config.tpPct || 5} onChange={e => updateConfig({ ...config, tpPct: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1 w-16 text-right border border-gray-300 dark:border-zinc-600 rounded-sm" />
+                                    <label class="flex flex-col gap-1" title="Minimum Score to Buy">
+                                        <span class="text-gray-400 text-[10px] uppercase font-bold">Buy Score</span>
+                                        <input type="number" min="10" max="100" step="5"
+                                            value={robot.buyScore}
+                                            onChange={e => updateRobotConfig(robot.id, 'buyScore', Number(e.target.value))}
+                                            class="bg-gray-100 dark:bg-zinc-700 p-1.5 text-right border border-gray-300 dark:border-zinc-600 rounded-sm w-full" />
                                     </label>
-                                    <label class="flex items-center gap-1" title="Minimum Score to Buy">
-                                        Buy Score:
-                                        <input type="number" min="10" max="100" step="5" value={config.buyScore || 60} onChange={e => updateConfig({ ...config, buyScore: Number(e.target.value) })} class="bg-gray-100 dark:bg-zinc-700 p-1 w-16 text-right border border-gray-300 dark:border-zinc-600 rounded-sm" />
+                                    <label class="flex flex-col gap-1" title="Maximum Open Positions">
+                                        <span class="text-gray-400 text-[10px] uppercase font-bold">Max Pos.</span>
+                                        <input type="number" min="1" max="20" step="1"
+                                            value={robot.maxPositions}
+                                            onChange={e => updateRobotConfig(robot.id, 'maxPositions', Number(e.target.value))}
+                                            class="bg-gray-100 dark:bg-zinc-700 p-1.5 text-right border border-gray-300 dark:border-zinc-600 rounded-sm w-full" />
                                     </label>
                                 </div>
                             </div>
-
-                            <div class="pt-6 border-t border-gray-200 dark:border-zinc-700">
-                                <h3 class="text-sm font-bold mb-2">API Status</h3>
-                                <ul class="text-xs space-y-2 text-gray-500 font-mono">
-                                    <li class="flex items-center gap-2">
-                                        <span class={`w-3 h-3 rounded-full ${marketData?.crypto?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                        Crypto: CoinGecko (Public API)
-                                    </li>
-                                    <li class="flex items-center gap-2">
-                                        <span class={`w-3 h-3 rounded-full ${marketData?.us?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                        US Stocks: Yahoo Finance via Proxy
-                                    </li>
-                                    <li class="flex items-center gap-2">
-                                        <span class={`w-3 h-3 rounded-full ${marketData?.pl?.length > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                        PL Stocks: Yahoo Finance via Proxy
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
+                        ))}
                     </div>
 
                     {/* Live Terminal UI */}
@@ -826,120 +909,108 @@
         };
 
         const BeginnerStats = ({ portfolio, marketData }) => {
-            // Aggregate data
-            const stats = useMemo(() => {
-                const uniqueSymbols = new Set([
-                    ...portfolio.history.map(h => h.symbol),
-                    ...portfolio.positions.map(p => p.symbol)
-                ]);
+            const ROBOT_IDS = ['score', 'strategy_a', 'strategy_b', 'strategy_c'];
 
-                // Exclude 'USD' (Cash deposits)
+            const computeStatsForRobot = (robotId) => {
+                const robotHistory = portfolio.history.filter(h => h.robotId === robotId && h.symbol !== 'USD');
+                const robotPositions = portfolio.positions.filter(p => p.robotId === robotId);
+                const uniqueSymbols = new Set([
+                    ...robotHistory.map(h => h.symbol),
+                    ...robotPositions.map(p => p.symbol)
+                ]);
                 uniqueSymbols.delete('USD');
 
-                const computed = [];
                 const allMarketAssets = [...(marketData.us || []), ...(marketData.pl || []), ...(marketData.crypto || [])];
+                const computed = [];
 
                 uniqueSymbols.forEach(symbol => {
-                    // Filter history for this symbol
-                    const txs = portfolio.history.filter(h => h.symbol === symbol);
-
-                    let totalInvested = 0;
-                    let totalSold = 0;
-                    let totalQtyBuys = 0;
-
+                    const txs = robotHistory.filter(h => h.symbol === symbol);
+                    let totalInvested = 0, totalSold = 0;
                     txs.forEach(tx => {
-                        if (tx.type === 'BUY') {
-                            totalInvested += tx.qty * tx.price;
-                            totalQtyBuys += tx.qty;
-                        } else if (tx.type === 'SELL') {
-                            totalSold += tx.qty * tx.price;
-                        }
+                        if (tx.type === 'BUY') totalInvested += tx.qty * tx.price;
+                        else if (tx.type === 'SELL') totalSold += tx.qty * tx.price;
                     });
-
-                    // Current Position Value
-                    const pos = portfolio.positions.find(p => p.symbol === symbol);
-                    // Get real-time price if available, else use pos.avgPrice or last known
+                    const pos = robotPositions.find(p => p.symbol === symbol);
                     const marketAsset = allMarketAssets.find(a => a.symbol === symbol);
                     const currentPrice = marketAsset ? marketAsset.price : (pos ? pos.avgPrice : 0);
-
                     const openQty = pos ? pos.qty : 0;
                     const currentValue = openQty * currentPrice;
-
-                    // Total P/L = (Returned + CurrentValue) - Invested
                     const totalPL = (totalSold + currentValue) - totalInvested;
-                    const isProfitable = totalPL >= 0;
 
                     computed.push({
-                        symbol,
-                        name: marketAsset ? marketAsset.name : symbol,
-                        totalInvested,
-                        totalSold,
-                        currentValue,
-                        totalPL,
-                        isProfitable,
-                        openQty
+                        symbol, name: marketAsset ? marketAsset.name : symbol,
+                        totalInvested, totalSold, currentValue, totalPL,
+                        isProfitable: totalPL >= 0, openQty
                     });
                 });
+                return computed.sort((a, b) => b.totalPL - a.totalPL);
+            };
 
-                return computed.sort((a, b) => b.totalPL - a.totalPL); // Best first
+            const allRobotStats = useMemo(() => {
+                return ROBOT_IDS.map(robotId => ({
+                    robotId,
+                    robotName: ROBOT_NAMES[robotId] || robotId,
+                    stats: computeStatsForRobot(robotId)
+                }));
             }, [portfolio, marketData]);
 
             return (
-                <div class="space-y-6">
-                    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-8 rounded-lg text-white shadow-lg mb-8">
+                <div class="space-y-8">
+                    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 p-8 rounded-lg text-white shadow-lg mb-4">
                         <h2 class="text-3xl font-bold mb-2">Your Investing Journey</h2>
-                        <p class="opacity-90">Keep track of your total profits and losses for each asset. Green means you made money, Red means you lost money.</p>
+                        <p class="opacity-90">Track profits and losses per robot strategy. Green = profit, Red = loss.</p>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {stats.map(stat => (
-                            <div key={stat.symbol} class="bg-white dark:bg-zinc-800 border-2 rounded-xl p-6 shadow-sm hover:shadow-md transition relative overflow-hidden group">
-                                <div class={`absolute top-0 left-0 w-2 h-full ${stat.isProfitable ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-
-                                <div class="flex justify-between items-start mb-4 pl-4">
-                                    <div>
-                                        <h3 class="text-2xl font-bold">{stat.symbol}</h3>
-                                        <p class="text-xs text-gray-500 font-bold uppercase">{stat.name}</p>
-                                    </div>
-                                    <div class={`text-xs font-bold px-2 py-1 rounded ${stat.openQty > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                                        {stat.openQty > 0 ? 'ACTIVE' : 'CLOSED'}
-                                    </div>
-                                </div>
-
-                                <div class="pl-4 space-y-4">
-                                    <div>
-                                        <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Profit / Loss</p>
-                                        <p class={`text-3xl font-bold font-mono ${stat.isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
-                                            {stat.totalPL >= 0 ? '+' : ''}{formatCurrency(stat.totalPL)}
-                                        </p>
-                                    </div>
-
-                                    <div class="grid grid-cols-2 gap-4 text-sm pt-4 border-t border-gray-100 dark:border-zinc-700">
-                                        <div>
-                                            <p class="text-xs text-gray-400">Total Invested</p>
-                                            <p class="font-bold">{formatCurrency(stat.totalInvested)}</p>
-                                        </div>
-                                        <div>
-                                            <p class="text-xs text-gray-400">Current Value</p>
-                                            <p class="font-bold">{formatCurrency(stat.currentValue + stat.totalSold)} <span class="text-[10px] opacity-60">(Inc. Sold)</span></p>
-                                        </div>
-                                    </div>
-
-                                    <div class={`p-3 rounded text-sm font-bold text-center ${stat.isProfitable ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
-                                        {stat.isProfitable
-                                            ? "🎉 Great job! You are in profit."
-                                            : "📉 Currently down. Persistence is key!"}
-                                    </div>
-                                </div>
+                    {allRobotStats.map(({ robotId, robotName, stats }) => (
+                        <div key={robotId} class="space-y-4">
+                            <div class="flex items-center gap-3 border-b-2 pb-2" style={{ borderColor: robotId === 'score' ? '#3b82f6' : robotId === 'strategy_a' ? '#10b981' : robotId === 'strategy_b' ? '#a855f7' : '#f97316' }}>
+                                <span class={`w-4 h-4 rounded-full ${ROBOT_BG[robotId]}`}></span>
+                                <h3 class="text-xl font-bold">{robotName}</h3>
+                                <span class="text-xs text-gray-400 font-mono">{stats.length} asset{stats.length !== 1 ? 's' : ''}</span>
                             </div>
-                        ))}
-                    </div>
-                    {stats.length === 0 && (
-                        <div class="text-center p-12 bg-gray-50 dark:bg-zinc-800/50 rounded-lg dashed-border">
-                            <h3 class="text-xl font-bold text-gray-400">No trading history yet</h3>
-                            <p class="text-gray-500 mt-2">Make your first trade to see statistics here!</p>
+
+                            {stats.length === 0 ? (
+                                <div class="text-center p-6 bg-gray-50 dark:bg-zinc-800/50 rounded-lg">
+                                    <p class="text-gray-500 text-sm">No trades yet for this robot.</p>
+                                </div>
+                            ) : (
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {stats.map(stat => (
+                                        <div key={stat.symbol} class="bg-white dark:bg-zinc-800 border rounded-xl p-5 shadow-sm hover:shadow-md transition relative overflow-hidden">
+                                            <div class={`absolute top-0 left-0 w-2 h-full ${stat.isProfitable ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                                            <div class="flex justify-between items-start mb-3 pl-4">
+                                                <div>
+                                                    <h4 class="text-xl font-bold">{stat.symbol}</h4>
+                                                    <p class="text-xs text-gray-500 font-bold uppercase">{stat.name}</p>
+                                                </div>
+                                                <div class={`text-xs font-bold px-2 py-1 rounded ${stat.openQty > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                                                    {stat.openQty > 0 ? 'ACTIVE' : 'CLOSED'}
+                                                </div>
+                                            </div>
+                                            <div class="pl-4 space-y-3">
+                                                <div>
+                                                    <p class="text-xs font-bold text-gray-400 uppercase tracking-wider">Total P/L</p>
+                                                    <p class={`text-2xl font-bold font-mono ${stat.isProfitable ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        {stat.totalPL >= 0 ? '+' : ''}{formatCurrency(stat.totalPL)}
+                                                    </p>
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-3 text-sm pt-3 border-t border-gray-100 dark:border-zinc-700">
+                                                    <div>
+                                                        <p class="text-xs text-gray-400">Invested</p>
+                                                        <p class="font-bold">{formatCurrency(stat.totalInvested)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p class="text-xs text-gray-400">Value</p>
+                                                        <p class="font-bold">{formatCurrency(stat.currentValue + stat.totalSold)}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
-                    )}
+                    ))}
                 </div>
             );
         };
@@ -990,10 +1061,57 @@
 
         const MainContent = ({ activeTab, marketData, loading, portfolio, liveEquity, onOpenTrade, selectedAsset, onSelectAsset, onOpenAddCash, config, updateConfig }) => {
             const currentAsset = selectedAsset || (marketData.us[0] || { symbol: 'AAPL', price: 173.50, change: 1.25, name: 'Apple Inc.' });
+            const ROBOT_IDS_DASH = ['score', 'strategy_a', 'strategy_b', 'strategy_c'];
+            const allAssets = marketData ? [...(marketData.us || []), ...(marketData.pl || []), ...(marketData.crypto || [])] : [];
+
+            // Per-robot P/L summary (always computed to satisfy React hooks rules)
+            const robotPLSummary = useMemo(() => {
+                const now = new Date();
+                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                const weekStart = todayStart - (now.getDay() * 86400000);
+
+                return ROBOT_IDS_DASH.map(robotId => {
+                    const robotHistory = portfolio.history.filter(h => h.robotId === robotId && (h.type === 'BUY' || h.type === 'SELL'));
+                    const robotPositions = portfolio.positions.filter(p => p.robotId === robotId);
+
+                    let totalRealizedPL = 0;
+                    let dailyPL = 0;
+                    let weeklyPL = 0;
+
+                    robotHistory.filter(h => h.type === 'SELL').forEach(sell => {
+                        const buyTxs = robotHistory.filter(h => h.type === 'BUY' && h.symbol === sell.symbol);
+                        const avgBuy = buyTxs.length > 0 ? buyTxs.reduce((sum, b) => sum + b.price, 0) / buyTxs.length : sell.price;
+                        const pl = (sell.price - avgBuy) * sell.qty;
+                        totalRealizedPL += pl;
+
+                        const sellTime = new Date(sell.date).getTime();
+                        if (sellTime >= todayStart) dailyPL += pl;
+                        if (sellTime >= weekStart) weeklyPL += pl;
+                    });
+
+                    let unrealizedPL = 0;
+                    robotPositions.forEach(pos => {
+                        const asset = allAssets.find(a => a.symbol === pos.symbol);
+                        const currentPrice = asset ? asset.price : pos.avgPrice;
+                        unrealizedPL += (currentPrice - pos.avgPrice) * pos.qty;
+                    });
+
+                    return {
+                        robotId,
+                        name: ROBOT_NAMES[robotId] || robotId,
+                        posCount: robotPositions.length,
+                        totalPL: totalRealizedPL + unrealizedPL,
+                        dailyPL,
+                        weeklyPL,
+                        unrealizedPL
+                    };
+                });
+            }, [portfolio, marketData]);
 
             if (activeTab === 'Dashboard') {
+
                 return (
-                    <section class="col-span-3 space-y-8">
+                    <section class="col-span-3 space-y-6">
                         <div class="grid grid-cols-2 gap-4">
                             <div class="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 p-6 rounded-sm shadow-sm">
                                 <span class="text-xs uppercase font-bold text-gray-400">Total Equity</span>
@@ -1011,7 +1129,39 @@
                                 </button>
                             </div>
                         </div>
-                        <PositionsTable positions={portfolio.positions} marketData={marketData} onOpenTrade={onOpenTrade} />
+
+                        {/* Per-Robot P/L Summary Cards */}
+                        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            {robotPLSummary.map(r => (
+                                <div key={r.robotId} class={`bg-white dark:bg-zinc-800 border-l-4 ${ROBOT_COLORS[r.robotId]} p-4 rounded-sm shadow-sm`}>
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class={`w-2 h-2 rounded-full ${ROBOT_BG[r.robotId]}`}></span>
+                                        <span class="text-xs font-bold uppercase tracking-wider text-gray-400 truncate">{r.name}</span>
+                                    </div>
+                                    <div class={`text-lg font-bold font-mono ${r.totalPL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                        {r.totalPL >= 0 ? '+' : ''}{formatCurrency(r.totalPL)}
+                                    </div>
+                                    <div class="flex gap-3 mt-2 text-[10px] font-mono text-gray-400">
+                                        <span>Today: <span class={r.dailyPL >= 0 ? 'text-emerald-400' : 'text-red-400'}>{r.dailyPL >= 0 ? '+' : ''}{formatCurrency(r.dailyPL)}</span></span>
+                                        <span>Week: <span class={r.weeklyPL >= 0 ? 'text-emerald-400' : 'text-red-400'}>{r.weeklyPL >= 0 ? '+' : ''}{formatCurrency(r.weeklyPL)}</span></span>
+                                    </div>
+                                    <div class="text-[10px] text-gray-500 mt-1">{r.posCount} position{r.posCount !== 1 ? 's' : ''}</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Per-Robot Position Tables */}
+                        {ROBOT_IDS_DASH.map(robotId => (
+                            <PositionsTable
+                                key={robotId}
+                                positions={portfolio.positions}
+                                marketData={marketData}
+                                onOpenTrade={onOpenTrade}
+                                robotId={robotId}
+                                robotName={ROBOT_NAMES[robotId]}
+                            />
+                        ))}
+
                         <MarketTable title="Top Movers" data={marketData.us.slice(0, 3)} loading={loading} onOpenTrade={onOpenTrade} onSelect={onSelectAsset} />
                     </section>
                 );
